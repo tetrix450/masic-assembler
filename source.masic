@@ -1,0 +1,54 @@
+.org 0x0000; vectores de interrupción, comenzando por el vector de reset
+
+reset:
+.d16 inicio
+
+puntero:
+.d16 0
+
+.ascii "Hola EMASIC"
+.equ doscientoscincuentaycinco #0xFF
+
+.macro PRINT_CHAR char_pointer index_pointer
+    ;mover caracter a memoria de video
+    load char_pointer
+    out [index_pointer]
+
+    ;incrementar puntero
+    load index_pointer
+    inc
+    load index_pointer+1
+    adc #0
+.endm
+
+.org 0x0100; código del programa (ROM)
+
+inc_puntero:
+    push
+
+    load puntero
+    inc
+    store puntero
+
+    load puntero+1
+    inc
+    store puntero+1
+
+    pop
+ret
+
+inicio:
+load #0
+    bucle:
+        store [puntero]
+        call inc_puntero
+        inc
+    cmp doscientoscincuentaycinco
+    jnz bucle
+
+store #20 + (30/3*(2-20))+1
+load #-20
+
+.org 0x2000; zona de variables (RAM)
+puntero:
+.d16 0x0000
