@@ -3,11 +3,24 @@
 reset:
 .d16 inicio
 
-puntero:
-.d16 0
+puntero: .d16 0
+dato: .d8 45 50 12
+buffer8: .r8 40
+buffer16: .r16 10
 
 .ascii "Hola EMASIC"
 .equ doscientoscincuentaycinco #0xFF
+.equ direccion1000 1000
+
+.macro SUMAR op1 op2
+    push
+
+    load op1
+    add op2
+    store op1
+
+    pop
+.endm
 
 .macro PRINT_CHAR char_pointer index_pointer
     ;mover caracter a memoria de video
@@ -48,6 +61,9 @@ load #0
 
 store #20 + (30/3*(2-20))+1
 load #-20
+
+SUMAR direccion1 dato+2
+SUMAR 0x0000 buffer8
 
 .org 0x2000; zona de variables (RAM)
 puntero:

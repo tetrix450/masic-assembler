@@ -9,8 +9,8 @@
 #include <set>
 
 // Token type
-enum type_t{IDENTIFIER, NUMBER, STRING, DIRECTIVE, LABEL, LBRACKET, RBRACKET,
-ENDLINE, ARITHMETIC_OPERATOR, LPARENTHESIS, RPARENTHESIS, HASH, END};
+enum type_t{TK_IDENTIFIER, TK_NUMBER, TK_STRING, TK_DIRECTIVE, TK_LABEL, TK_LBRACKET, TK_RBRACKET,
+TK_ENDLINE, TK_ARITHMETIC_OP, TK_LPARENTHESIS, TK_RPARENTHESIS, TK_HASH, TK_END};
 
 // Token struct
 struct token_t{
@@ -161,6 +161,10 @@ enum addr_t {DIRECT, IMMEDIATE, INDIRECT, NOOP, SIGNED, UNSIGNED};
 std::map<std::string, uint16_t> labels;
 
 // Macro dictionary
+struct macro_t{
+    std::vector<std::string> parameters;
+    std::vector<token_t> body;
+};
 std::map<std::string, std::vector<token_t>> macros;
 
 // Symbol table (labels, equs...)
@@ -263,12 +267,6 @@ std::set<std::string> directives = {"d8", "d16", "r8", "r16", "org", "macro", "e
 // This is where all the source code is stored as tokens
 std::vector<struct token_t> program;
 
-struct inst_t{
-    std::string mnemonic;
-    addr_t addressing;
-    size_t address;
-};
-
 class Lexer{
     private:
         std::string src = ""; // Source code
@@ -276,6 +274,8 @@ class Lexer{
         size_t pos = 0; // Current position in src currently being indexed
         size_t line = 1; // Current line number in source code
         size_t col = 1; // Current column number in source code
+
+        std::vector<token_t> tokens;
 
         // Advance cursor
         int advance(){
@@ -303,11 +303,11 @@ class Lexer{
             // It is a label
             if(pos < src.size() && src[pos] == ':'){
                 advance();
-                return {LABEL, value, start + 1, start_col};
+                return {TK_LABEL, value, start + 1, start_col};
             }
 
             // It is an identifier
-            return {IDENTIFIER, value, start + 1, start_col};
+            return {TK_IDENTIFIER, value, start + 1, start_col};
         }
 
         token_t read_directive(){
@@ -323,7 +323,7 @@ class Lexer{
             std::string value = src.substr(start, pos - start);
 
             // Return the token
-            return {DIRECTIVE, value, start + 1, start_col};
+            return {TK_DIRECTIVE, value, start + 1, start_col};
         }
 
         token_t read_string(){
@@ -336,7 +336,7 @@ class Lexer{
             }
 
             if(pos == src.size() - 1){
-                std::cerr << "Found string with no closing quotes (\")" << std::endl;
+                std::cerr << "[Error] Found string with no closing quotes (\")" << std::endl;
                 exit(1);
             }else{
                 advance();
@@ -345,7 +345,7 @@ class Lexer{
             // Get the directive string
             std::string value = src.substr(start, pos - start - 1);
 
-            return {STRING, value, start + 1, start_col};
+            return {TK_STRING, value, start + 1, start_col};
         }
 
         token_t read_number(){
@@ -400,14 +400,14 @@ class Lexer{
             }
 
             if(start == pos){
-                std::cerr << "Invalid number at line " << line << ", position " << col << std::endl;
+                std::cerr << "[Error] Invalid number at line " << line << ", position " << col << std::endl;
                 exit(1);
             }
 
             std::string value = src.substr(start, pos - start);
             if(negative) value = "-" + value;
 
-            return {NUMBER, value, line, start_col};
+            return {TK_NUMBER, value, line, start_col};
         }
 
     public:
@@ -438,7 +438,6 @@ class Lexer{
         }
 
         std::vector<token_t> tokenize(){
-            std::vector<token_t> tokens;
 
             // Read character by character and tokenize all the program
             while(pos < src.size()){
@@ -459,7 +458,7 @@ class Lexer{
                     tokens.push_back(read_directive());
                 }else if(c == '\n'){
                     // Endline
-                    tokens.push_back({ENDLINE, "\n", line, col});
+                    tokens.push_back({TK_ENDLINE, "\n", line, col});
                     advance();
                 }else if(c == '\"'){
                     // String
@@ -467,38 +466,99 @@ class Lexer{
                     tokens.push_back(read_string());
                 }else if(c == '#'){
                     // Immediate value
-                    tokens.push_back({HASH, "#", line, col});
+                    tokens.push_back({TK_HASH, "#", line, col});
                     advance();
                 }else if(c == '['){
                     // Left bracket
-                    tokens.push_back({LBRACKET, "[", line, col});
+                    tokens.push_back({TK_LBRACKET, "[", line, col});
                     advance();
                 }else if(c == ']'){
                     // Right bracket
-                    tokens.push_back({RBRACKET, "]", line, col});
+                    tokens.push_back({TK_RBRACKET, "]", line, col});
                     advance();
                 }else if(c == '('){
                     // Left parentheses
-                    tokens.push_back({LPARENTHESIS, "(", line, col});
+                    tokens.push_back({TK_LPARENTHESIS, "(", line, col});
                     advance();
                 }else if(c == ')'){
                     // Right parentheses
-                    tokens.push_back({RPARENTHESIS, ")", line, col});
+                    tokens.push_back({TK_RPARENTHESIS, ")", line, col});
                     advance();
                 }else if(c == '+' || c == '-' || c == '*' || c == '/'){
                     // Arithmetic operator
-                    tokens.push_back({ARITHMETIC_OPERATOR, std::string(1, c), line, col});
+                    tokens.push_back({TK_ARITHMETIC_OP, std::string(1, c), line, col});
                     advance();
                 }else{
-                    std::cerr << "Unexpected character: " << c << " on line " << line << ", position " << col << std::endl;
+                    std::cerr << "[Error] Unexpected character: " << c << " on line " << line << ", position " << col << std::endl;
                     exit(1);
                     advance();
                 }
             }
 
-            tokens.push_back({END, "", line, col});
+            tokens.push_back({TK_END, "TK_END", line, col});
             return tokens;
         }
+
+        void print(){
+            for(size_t i = 0; i < tokens.size(); i++){
+                token_t token = tokens[i];
+
+                switch(token.type){
+                    case TK_ARITHMETIC_OP:
+                        std::cout << "TK_ARITHMETIC_OP:";
+                    break;
+                    case TK_DIRECTIVE:
+                        std::cout << "TK_DIRECTIVE:";
+                    break;
+                    case TK_ENDLINE:
+                        std::cout << "TK_ENDLINE" << std::endl;
+                    break;
+                    case TK_HASH:
+                        std::cout << "TK_HASH:";
+                    break;
+                    case TK_LABEL:
+                        std::cout << "TK_LABEL:";
+                    break;
+                    case TK_LBRACKET:
+                        std::cout << "TK_LBRACKET:";
+                    break;
+                    case TK_RBRACKET:
+                        std::cout << "TK_RBRACKET:";
+                    break;
+                    case TK_LPARENTHESIS:
+                        std::cout << "TK_LPARENTHESIS:";
+                    break;
+                    case TK_RPARENTHESIS:
+                        std::cout << "TK_RPARENTHESIS:";
+                    break;
+                    case TK_NUMBER:
+                        std::cout << "TK_NUMBER:";
+                    break;
+                    case TK_STRING:
+                        std::cout << "TK_STRING:";
+                    break;
+                    case TK_IDENTIFIER:
+                        std::cout << "TK_IDENTIFIER:";
+                    break;
+                    default:
+                        std::cout << "TK_END" << std::endl;
+                    break;
+                }
+
+                if(token.type != TK_ENDLINE && token.type != TK_END)
+                std::cout << token.value << " ";
+            }
+        }
+};
+
+// Intermediate representation node
+enum kind_t {NODE_INSTRUCTION, NODE_DIRECTIVE, NODE_LABEL};
+struct irnode_t{
+    kind_t kind;
+    std::string mnemonic;
+    addr_t addressing;
+    std::string operand;
+    size_t size;
 };
 
 class Parser{
@@ -506,90 +566,38 @@ class Parser{
         std::vector<token_t> tokens;
         size_t pos;
         size_t location_counter;
+
     public:
-        Parser(std::vector<token_t> tokens):tokens(tokens){}
+        Parser(std::vector<token_t> tokens):tokens(tokens), pos(0), location_counter(0){}
 
         void parse(){
             for(size_t i = 0; i < tokens.size(); i++){
                 token_t token = tokens[i];
 
                 switch(token.type){
-                    case ARITHMETIC_OPERATOR:
+                    case TK_DIRECTIVE:
+                        if(token.value == "equ"){
+                            
+                        }
+                    break;
+                    case TK_IDENTIFIER:
 
                     break;
-                    case DIRECTIVE:
+                    case TK_ENDLINE:
 
                     break;
-                    case ENDLINE:
+                    case TK_LABEL:
 
                     break;
-                    case HASH:
-
-                    break;
-                    case LABEL:
-
-                    break;
-                    case LBRACKET:
-
-                    break;
-                    case RBRACKET:
-
-                    break;
-                    case LPARENTHESIS:
-
-                    break;
-                    case RPARENTHESIS:
-
-                    break;
-                    case NUMBER:
-
-                    break;
-                    case STRING:
-
-                    break;
-                    case IDENTIFIER:
-
+                    case TK_END:
+                        // Do nothing, it's the end of the file
                     break;
                     default:
-                        printf("end token\n");
+                        std::cerr << "[Error] Unexpected token \"" << token.value << "\" at line " << token.line << ", column " << token.column << std::endl;
+                    break;
                 }
             }
         };
-
-        void print(){
-            for(size_t i = 0; i < tokens.size(); i++){
-                if(tokens[i].value != "\n"){
-                    std::string tipo;
-                    if(tokens[i].type == LABEL){
-                        tipo = "LABEL";
-                    }else if(tokens[i].type == DIRECTIVE){
-                        tipo = "DIRECTIVE";
-                    }else if(tokens[i].type == STRING){
-                        tipo = "STRING";
-                    }else if(tokens[i].type == ARITHMETIC_OPERATOR){
-                        tipo = "ARITH_OP";
-                    }else if(tokens[i].type == IDENTIFIER){
-                        tipo = "IDENTIFIER";
-                    }else if(tokens[i].type == NUMBER){
-                        tipo = "NUMBER";
-                    }else if(tokens[i].type == HASH){
-                        tipo = "HASH";
-                    }else if(tokens[i].type == LBRACKET){
-                        tipo = "LBRACKET";
-                    }else if(tokens[i].type == RBRACKET){
-                        tipo = "RBRACKET";
-                    }else if(tokens[i].type == LPARENTHESIS){
-                        tipo = "LPARENTHESIS";
-                    }else if(tokens[i].type == RPARENTHESIS){
-                        tipo = "RPARENTHESIS";
-                    }
-                    std::cout << tipo << ":" << tokens[i].value << " ";
-                }else{
-                    std::cout << "ENDLINE" << std::endl;
-                }
-            }
-            std::cout << std::endl;
-        }
 };
 
 int main(int argc, char* argv[]){
@@ -609,13 +617,20 @@ int main(int argc, char* argv[]){
     // Open output file
     std::ofstream output_file(output_filename, std::ios::binary);
     if(!output_file.is_open()){
-        std::cerr << "Cannot open output file: " << output_filename << std::endl;
+        std::cerr << "[Error] Cannot open output file: " << output_filename << std::endl;
         return 1;
     }
 
-    // Tokenizar y parsear
-    Parser parser(Lexer(source_filename).tokenize());
+    // Tokenize
+    Lexer lexer(source_filename);
+    std::vector<token_t> tokens = lexer.tokenize();
+    lexer.print();
+
+    // Parse
+    Parser parser(tokens);
     parser.parse();
+
+    // Assemble
 
     // Close files
     output_file.close();
