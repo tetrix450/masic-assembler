@@ -8,6 +8,17 @@
 #include <limits>
 #include <set>
 
+// Token type
+enum type_t{IDENTIFIER, NUMBER, STRING, DIRECTIVE, LABEL, LBRACKET, RBRACKET,
+ENDLINE, ARITHMETIC_OPERATOR, LPARENTHESIS, RPARENTHESIS, HASH, END};
+
+// Token struct
+struct token_t{
+    type_t type;
+    std::string value;
+    size_t line, column;
+};
+
 // Convert a string to an uint8_t securely. Accepts binary, hexadecimal and octal
 uint8_t strto8(const std::string &input) {
     std::string s = input;
@@ -150,10 +161,15 @@ enum addr_t {DIRECT, IMMEDIATE, INDIRECT, NOOP, SIGNED, UNSIGNED};
 std::map<std::string, uint16_t> labels;
 
 // Macro dictionary
-std::map<std::string, std::string> macros;
+std::map<std::string, std::vector<token_t>> macros;
 
-// Equivalence dictionary
-std::map<std::string, std::string> equs;
+// Symbol table (labels, equs...)
+struct symbol_t{
+    size_t address;
+
+};
+
+std::map<std::string, symbol_t> symbol_table;
 
 // Opcode list
 std::map<std::pair<std::string, addr_t>, uint8_t> opcodes = {
@@ -238,24 +254,20 @@ std::map<std::pair<std::string, addr_t>, uint8_t> opcodes = {
 std::set<std::string> mnemonics = {"JMP", "CLC", "STC", "CLI", "STI", "HLT", "INC", "DEC", "LOAD", "STORE", "ADD",
  "ADC", "SUB", "AND", "OR", "NOT", "NEG", "CMP", "NOP", "JO", "JNO", "JZ", "JE", "JNZ", "JNE", "JNAE", "JB", "JAE",
   "JNB", "JBE", "JNA", "JA", "JNBE", "JC", "JNC", "JS", "JNS", "SHL", "SHR", "ROL", "ROR", "RCL", "PUSH", "POP",
-  "CALL", "RET", "INT", "RETI", "IRET", "STSP", "IN", "OUT", "LDSPL", "LDSPH"};
+  "CALL", "RET", "INT", "RETI", "IRET", "STSP", "IN", "OUT", "LDSPL", "LDSPH"
+};
 
 // Directive identifiers (they all start with a '.')
 std::set<std::string> directives = {"d8", "d16", "r8", "r16", "org", "macro", "endm", "equ", "ascii"};
 
-// Token type
-enum type_t{IDENTIFIER, NUMBER, STRING, DIRECTIVE, LABEL, LBRACKET, RBRACKET,
-ENDLINE, ARITHMETIC_OPERATOR, LPARENTHESIS, RPARENTHESIS, HASH};
-
-// Token struct
-struct token_t{
-    type_t type;
-    std::string value;
-    size_t line, column;
-};
-
 // This is where all the source code is stored as tokens
 std::vector<struct token_t> program;
+
+struct inst_t{
+    std::string mnemonic;
+    addr_t addressing;
+    size_t address;
+};
 
 class Lexer{
     private:
@@ -276,17 +288,6 @@ class Lexer{
             return pos++;
         }
 
-        // Get current position and advance
-        char consume(){
-            return src[advance()];
-        }
-
-        // Get current position and do not advance
-        char peek(){
-            return src[pos];
-        }
-
-        // Read an identifier or a label from a token
         token_t read_identifier_or_label(){
             size_t start = pos;
             size_t start_col = col;
@@ -495,6 +496,7 @@ class Lexer{
                 }
             }
 
+            tokens.push_back({END, "", line, col});
             return tokens;
         }
 };
@@ -502,44 +504,92 @@ class Lexer{
 class Parser{
     private:
         std::vector<token_t> tokens;
+        size_t pos;
+        size_t location_counter;
     public:
+        Parser(std::vector<token_t> tokens):tokens(tokens){}
 
-    Parser(std::vector<token_t> tokens):tokens(tokens){}
+        void parse(){
+            for(size_t i = 0; i < tokens.size(); i++){
+                token_t token = tokens[i];
 
-    void print(){
-        for(size_t i = 0; i < tokens.size(); i++){
-            if(tokens[i].value != "\n"){
-                std::string tipo;
-                if(tokens[i].type == LABEL){
-                    tipo = "LABEL";
-                }else if(tokens[i].type == DIRECTIVE){
-                    tipo = "DIRECTIVE";
-                }else if(tokens[i].type == STRING){
-                    tipo = "STRING";
-                }else if(tokens[i].type == ARITHMETIC_OPERATOR){
-                    tipo = "ARITH_OP";
-                }else if(tokens[i].type == IDENTIFIER){
-                    tipo = "IDENTIFIER";
-                }else if(tokens[i].type == NUMBER){
-                    tipo = "NUMBER";
-                }else if(tokens[i].type == HASH){
-                    tipo = "HASH";
-                }else if(tokens[i].type == LBRACKET){
-                    tipo = "LBRACKET";
-                }else if(tokens[i].type == RBRACKET){
-                    tipo = "RBRACKET";
-                }else if(tokens[i].type == LPARENTHESIS){
-                    tipo = "LPARENTHESIS";
-                }else if(tokens[i].type == RPARENTHESIS){
-                    tipo = "RPARENTHESIS";
+                switch(token.type){
+                    case ARITHMETIC_OPERATOR:
+
+                    break;
+                    case DIRECTIVE:
+
+                    break;
+                    case ENDLINE:
+
+                    break;
+                    case HASH:
+
+                    break;
+                    case LABEL:
+
+                    break;
+                    case LBRACKET:
+
+                    break;
+                    case RBRACKET:
+
+                    break;
+                    case LPARENTHESIS:
+
+                    break;
+                    case RPARENTHESIS:
+
+                    break;
+                    case NUMBER:
+
+                    break;
+                    case STRING:
+
+                    break;
+                    case IDENTIFIER:
+
+                    break;
+                    default:
+                        printf("end token\n");
                 }
-                std::cout << tipo << ":" << tokens[i].value << " ";
-            }else{
-                std::cout << "ENDLINE" << std::endl;
             }
+        };
+
+        void print(){
+            for(size_t i = 0; i < tokens.size(); i++){
+                if(tokens[i].value != "\n"){
+                    std::string tipo;
+                    if(tokens[i].type == LABEL){
+                        tipo = "LABEL";
+                    }else if(tokens[i].type == DIRECTIVE){
+                        tipo = "DIRECTIVE";
+                    }else if(tokens[i].type == STRING){
+                        tipo = "STRING";
+                    }else if(tokens[i].type == ARITHMETIC_OPERATOR){
+                        tipo = "ARITH_OP";
+                    }else if(tokens[i].type == IDENTIFIER){
+                        tipo = "IDENTIFIER";
+                    }else if(tokens[i].type == NUMBER){
+                        tipo = "NUMBER";
+                    }else if(tokens[i].type == HASH){
+                        tipo = "HASH";
+                    }else if(tokens[i].type == LBRACKET){
+                        tipo = "LBRACKET";
+                    }else if(tokens[i].type == RBRACKET){
+                        tipo = "RBRACKET";
+                    }else if(tokens[i].type == LPARENTHESIS){
+                        tipo = "LPARENTHESIS";
+                    }else if(tokens[i].type == RPARENTHESIS){
+                        tipo = "RPARENTHESIS";
+                    }
+                    std::cout << tipo << ":" << tokens[i].value << " ";
+                }else{
+                    std::cout << "ENDLINE" << std::endl;
+                }
+            }
+            std::cout << std::endl;
         }
-        std::cout << std::endl;
-    }
 };
 
 int main(int argc, char* argv[]){
@@ -565,7 +615,7 @@ int main(int argc, char* argv[]){
 
     // Tokenizar y parsear
     Parser parser(Lexer(source_filename).tokenize());
-    parser.print();
+    parser.parse();
 
     // Close files
     output_file.close();
