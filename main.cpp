@@ -9,12 +9,12 @@
 #include <set>
 
 // Token type
-enum type_t{TK_IDENTIFIER, TK_NUMBER, TK_STRING, TK_DIRECTIVE, TK_LABEL, TK_LBRACKET, TK_RBRACKET,
-TK_ENDLINE, TK_ARITHMETIC_OP, TK_LPARENTHESIS, TK_RPARENTHESIS, TK_HASH, TK_END};
+enum ttype_t{TK_IDENTIFIER, TK_NUMBER, TK_STRING, TK_DIRECTIVE, TK_LABEL, TK_LBRACKET, TK_RBRACKET,
+TK_ENDLINE, TK_PLUS, TK_MINUS, TK_MULTIPLY, TK_DIVIDE, TK_LPARENTHESIS, TK_RPARENTHESIS, TK_HASH, TK_END, TK_INVALID};
 
 // Token struct
 struct token_t{
-    type_t type;
+    ttype_t type;
     std::string value;
     size_t line, column;
 };
@@ -60,7 +60,7 @@ uint8_t strto8(const std::string &input) {
         else if (base == 8) valid = (c >= '0' && c <= '7');
         else if (base == 10) valid = std::isdigit(c);
         else if (base == 16) valid = std::isxdigit(c);
-        if (!valid) throw std::invalid_argument("Invalid character for the base");
+        if (!valid) throw std::invalid_argument("Invalid character");
     }
 
     // Conversion
@@ -127,7 +127,7 @@ uint16_t strto16(const std::string &input){
         else if (base == 8) valid = (c >= '0' && c <= '7');
         else if (base == 10) valid = std::isdigit(c);
         else if (base == 16) valid = std::isxdigit(c);
-        if (!valid) throw std::invalid_argument("Carácter no válido para la base");
+        if (!valid) throw std::invalid_argument("Invalid character");
     }
 
     // Secure conversion
@@ -138,10 +138,10 @@ uint16_t strto16(const std::string &input){
         if (std::isdigit(c)) digit = c - '0';
         else if (std::isalpha(c)) digit = std::tolower(c) - 'a' + 10;
 
-        if (digit >= (uint32_t)base) throw std::invalid_argument("Dígito fuera de rango");
+        if (digit >= (uint32_t)base) throw std::invalid_argument("Out of range digit");
 
         if (value > (std::numeric_limits<uint16_t>::max() - digit) / base)
-            throw std::overflow_error("Overflow: el número no cabe en 16 bits");
+            throw std::overflow_error("Overflow: number does not fit in 16bits");
 
         value = value * base + digit;
     }
@@ -155,7 +155,7 @@ uint16_t strto16(const std::string &input){
 }
 
 // Addressing datatype
-enum addr_t {DIRECT, IMMEDIATE, INDIRECT, NOOP, SIGNED, UNSIGNED};
+enum addr_t {ADDR_DIRECT, ADDR_IMMEDIATE, ADDR_INDIRECT, ADDR_NOOP, ADDR_DIRECT_SIGNED, ADDR_DIRECT_UNSIGNED};
 
 // Label dictionary
 std::map<std::string, uint16_t> labels;
@@ -168,93 +168,156 @@ struct macro_t{
 std::map<std::string, std::vector<token_t>> macros;
 
 // Symbol table (labels, equs...)
-struct symbol_t{
-    size_t address;
-
-};
-
-std::map<std::string, symbol_t> symbol_table;
+std::map<std::string, uint16_t> symbol_table;
 
 // Opcode list
 std::map<std::pair<std::string, addr_t>, uint8_t> opcodes = {
-    {{"JMP", DIRECT}, 0x00},
-    {{"CLC", NOOP}, 0x01},
-    {{"STC", NOOP}, 0x02},
-    {{"CLI", NOOP}, 0x03},
-    {{"STI", NOOP}, 0x04},
-    {{"HLT", NOOP}, 0x05},
-    {{"INC", NOOP}, 0x06},
-    {{"DEC", NOOP}, 0x07},
-    {{"LOAD", DIRECT}, 0x08},
-    {{"LOAD", IMMEDIATE}, 0x09},
-    {{"LOAD", INDIRECT}, 0x0A},
-    {{"STORE", DIRECT}, 0x0B},
-    {{"STORE", INDIRECT}, 0x0C},
-    {{"ADD", DIRECT}, 0x0D},
-    {{"ADD", IMMEDIATE}, 0x0E},
-    {{"ADC", DIRECT}, 0x0F},
-    {{"ADC", IMMEDIATE}, 0x10},
-    {{"SUB", DIRECT}, 0x11},
-    {{"SUB", IMMEDIATE}, 0x12},
-    {{"AND", DIRECT}, 0x13},
-    {{"AND", IMMEDIATE}, 0x14},
-    {{"OR", DIRECT}, 0x15},
-    {{"OR", IMMEDIATE}, 0x16},
-    {{"NOT", NOOP}, 0x17},
-    {{"NEG", NOOP}, 0x18},
-    {{"CMP", DIRECT}, 0x19},
-    {{"CMP", IMMEDIATE}, 0x1A},
-    {{"NOP", NOOP}, 0x1B},
-    {{"JO", DIRECT}, 0x1C},
-    {{"JNO", DIRECT}, 0x1D},
-    {{"JZ", DIRECT}, 0x1E},
-    {{"JE", DIRECT}, 0x1E},
-    {{"JNZ", DIRECT}, 0x1F},
-    {{"JNE", DIRECT}, 0x1F},
-    {{"JNAE", SIGNED}, 0x20},
-    {{"JB", SIGNED}, 0x20},
-    {{"JAE", SIGNED}, 0x21},
-    {{"JNB", SIGNED}, 0x21},
-    {{"JNA", SIGNED}, 0x22},
-    {{"JBE", SIGNED}, 0x22},
-    {{"JA", SIGNED}, 0x23},
-    {{"JNBE", SIGNED}, 0x23},
-    {{"JNAE", UNSIGNED}, 0x24},
-    {{"JB", UNSIGNED}, 0x24},
-    {{"JAE", UNSIGNED}, 0x25},
-    {{"JNB", UNSIGNED}, 0x25},
-    {{"JBE", UNSIGNED}, 0x26},
-    {{"JNA", UNSIGNED}, 0x26},
-    {{"JA", UNSIGNED}, 0x27},
-    {{"JNBE", UNSIGNED}, 0x27},
-    {{"JS", DIRECT}, 0x28},
-    {{"JNS", DIRECT}, 0x29},
-    {{"JMP", INDIRECT}, 0x2A},
-    {{"SHL", NOOP}, 0x2B},
-    {{"SHR", SIGNED}, 0x2C},
-    {{"SHR", UNSIGNED}, 0x2D},
-    {{"ROL", NOOP}, 0x2E},
-    {{"ROR", NOOP}, 0x2F},
-    {{"IN", INDIRECT}, 0x30},
-    {{"PUSH", NOOP}, 0x31},
-    {{"POP", NOOP}, 0x32},
-    {{"CALL", NOOP}, 0x33},
-    {{"RET", NOOP}, 0x34},
-    {{"INT", DIRECT}, 0x35},
-    {{"IRET", NOOP}, 0x36},
-    {{"RETI", NOOP}, 0x36},
-    {{"STSP", DIRECT}, 0x37},
-    {{"OUT", INDIRECT}, 0x38},
-    {{"LDSPL", NOOP}, 0x39},
-    {{"RCL", NOOP}, 0x3A},
-    {{"RCR", NOOP}, 0x3B},
-    {{"CMP", INDIRECT}, 0x3C},
-    {{"IN", DIRECT}, 0x3D},
-    {{"OUT", DIRECT}, 0x3E},
-    {{"LDSPH", NOOP}, 0x3F},
+    {{"JMP", ADDR_DIRECT}, 0x00},
+    {{"CLC", ADDR_NOOP}, 0x01},
+    {{"STC", ADDR_NOOP}, 0x02},
+    {{"CLI", ADDR_NOOP}, 0x03},
+    {{"STI", ADDR_NOOP}, 0x04},
+    {{"HLT", ADDR_NOOP}, 0x05},
+    {{"INC", ADDR_NOOP}, 0x06},
+    {{"DEC", ADDR_NOOP}, 0x07},
+    {{"LOAD", ADDR_DIRECT}, 0x08},
+    {{"LOAD", ADDR_IMMEDIATE}, 0x09},
+    {{"LOAD", ADDR_INDIRECT}, 0x0A},
+    {{"STORE", ADDR_DIRECT}, 0x0B},
+    {{"STORE", ADDR_INDIRECT}, 0x0C},
+    {{"ADD", ADDR_DIRECT}, 0x0D},
+    {{"ADD", ADDR_IMMEDIATE}, 0x0E},
+    {{"ADC", ADDR_DIRECT}, 0x0F},
+    {{"ADC", ADDR_IMMEDIATE}, 0x10},
+    {{"SUB", ADDR_DIRECT}, 0x11},
+    {{"SUB", ADDR_IMMEDIATE}, 0x12},
+    {{"AND", ADDR_DIRECT}, 0x13},
+    {{"AND", ADDR_IMMEDIATE}, 0x14},
+    {{"OR", ADDR_DIRECT}, 0x15},
+    {{"OR", ADDR_IMMEDIATE}, 0x16},
+    {{"NOT", ADDR_NOOP}, 0x17},
+    {{"NEG", ADDR_NOOP}, 0x18},
+    {{"CMP", ADDR_DIRECT}, 0x19},
+    {{"CMP", ADDR_IMMEDIATE}, 0x1A},
+    {{"NOP", ADDR_NOOP}, 0x1B},
+    {{"JO", ADDR_DIRECT}, 0x1C},
+    {{"JNO", ADDR_DIRECT}, 0x1D},
+    {{"JZ", ADDR_DIRECT}, 0x1E},
+    {{"JE", ADDR_DIRECT}, 0x1E},
+    {{"JNZ", ADDR_DIRECT}, 0x1F},
+    {{"JNE", ADDR_DIRECT}, 0x1F},
+    {{"JNAE", ADDR_DIRECT_SIGNED}, 0x20},
+    {{"JB", ADDR_DIRECT_SIGNED}, 0x20},
+    {{"JAE", ADDR_DIRECT_SIGNED}, 0x21},
+    {{"JNB", ADDR_DIRECT_SIGNED}, 0x21},
+    {{"JNA", ADDR_DIRECT_SIGNED}, 0x22},
+    {{"JBE", ADDR_DIRECT_SIGNED}, 0x22},
+    {{"JA", ADDR_DIRECT_SIGNED}, 0x23},
+    {{"JNBE", ADDR_DIRECT_SIGNED}, 0x23},
+    {{"JNAE", ADDR_DIRECT_UNSIGNED}, 0x24},
+    {{"JB", ADDR_DIRECT_UNSIGNED}, 0x24},
+    {{"JAE", ADDR_DIRECT_UNSIGNED}, 0x25},
+    {{"JNB", ADDR_DIRECT_UNSIGNED}, 0x25},
+    {{"JBE", ADDR_DIRECT_UNSIGNED}, 0x26},
+    {{"JNA", ADDR_DIRECT_UNSIGNED}, 0x26},
+    {{"JA", ADDR_DIRECT_UNSIGNED}, 0x27},
+    {{"JNBE", ADDR_DIRECT_UNSIGNED}, 0x27},
+    {{"JS", ADDR_DIRECT}, 0x28},
+    {{"JNS", ADDR_DIRECT}, 0x29},
+    {{"JMP", ADDR_INDIRECT}, 0x2A},
+    {{"SHL", ADDR_NOOP}, 0x2B},
+    {{"SHR", ADDR_DIRECT_SIGNED}, 0x2C},
+    {{"SHR", ADDR_DIRECT_UNSIGNED}, 0x2D},
+    {{"ROL", ADDR_NOOP}, 0x2E},
+    {{"ROR", ADDR_NOOP}, 0x2F},
+    {{"IN", ADDR_INDIRECT}, 0x30},
+    {{"PUSH", ADDR_NOOP}, 0x31},
+    {{"POP", ADDR_NOOP}, 0x32},
+    {{"CALL", ADDR_NOOP}, 0x33},
+    {{"RET", ADDR_NOOP}, 0x34},
+    {{"INT", ADDR_DIRECT}, 0x35},
+    {{"IRET", ADDR_NOOP}, 0x36},
+    {{"RETI", ADDR_NOOP}, 0x36},
+    {{"STSP", ADDR_DIRECT}, 0x37},
+    {{"OUT", ADDR_INDIRECT}, 0x38},
+    {{"LDSPL", ADDR_NOOP}, 0x39},
+    {{"RCL", ADDR_NOOP}, 0x3A},
+    {{"RCR", ADDR_NOOP}, 0x3B},
+    {{"CMP", ADDR_INDIRECT}, 0x3C},
+    {{"IN", ADDR_DIRECT}, 0x3D},
+    {{"OUT", ADDR_DIRECT}, 0x3E},
+    {{"LDSPH", ADDR_NOOP}, 0x3F},
 };
 
-// Instruction identifiers
+// Instructions
+std::vector<std::pair<std::string, addr_t>> opcodes_inverse = {
+    {"JMP", ADDR_DIRECT},
+    {"CLC", ADDR_NOOP},
+    {"STC", ADDR_NOOP},
+    {"CLI", ADDR_NOOP},
+    {"STI", ADDR_NOOP},
+    {"HLT", ADDR_NOOP},
+    {"INC", ADDR_NOOP},
+    {"DEC", ADDR_NOOP},
+    {"LOAD", ADDR_DIRECT},
+    {"LOAD", ADDR_IMMEDIATE},
+    {"LOAD", ADDR_INDIRECT},
+    {"STORE", ADDR_DIRECT},
+    {"STORE", ADDR_INDIRECT},
+    {"ADD", ADDR_DIRECT},
+    {"ADD", ADDR_IMMEDIATE},
+    {"ADC", ADDR_DIRECT},
+    {"ADC", ADDR_IMMEDIATE},
+    {"SUB", ADDR_DIRECT},
+    {"SUB", ADDR_IMMEDIATE},
+    {"AND", ADDR_DIRECT},
+    {"AND", ADDR_IMMEDIATE},
+    {"OR", ADDR_DIRECT},
+    {"OR", ADDR_IMMEDIATE},
+    {"NOT", ADDR_NOOP},
+    {"NEG", ADDR_NOOP},
+    {"CMP", ADDR_DIRECT},
+    {"CMP", ADDR_IMMEDIATE},
+    {"NOP", ADDR_NOOP},
+    {"JO", ADDR_DIRECT},
+    {"JNO", ADDR_DIRECT},
+    {"JZ", ADDR_DIRECT},
+    {"JNZ", ADDR_DIRECT},
+    {"JB", ADDR_DIRECT_SIGNED},
+    {"JAE", ADDR_DIRECT_SIGNED},
+    {"JNA", ADDR_DIRECT_SIGNED},
+    {"JA", ADDR_DIRECT_SIGNED},
+    {"JB", ADDR_DIRECT_UNSIGNED},
+    {"JAE", ADDR_DIRECT_UNSIGNED},
+    {"JBE", ADDR_DIRECT_UNSIGNED},
+    {"JA", ADDR_DIRECT_UNSIGNED},
+    {"JS", ADDR_DIRECT},
+    {"JNS", ADDR_DIRECT},
+    {"JMP", ADDR_INDIRECT},
+    {"SHL", ADDR_NOOP},
+    {"SHR", ADDR_DIRECT_SIGNED},
+    {"SHR", ADDR_DIRECT_UNSIGNED},
+    {"ROL", ADDR_NOOP},
+    {"ROR", ADDR_NOOP},
+    {"IN", ADDR_INDIRECT},
+    {"PUSH", ADDR_NOOP},
+    {"POP", ADDR_NOOP},
+    {"CALL", ADDR_NOOP},
+    {"RET", ADDR_NOOP},
+    {"INT", ADDR_DIRECT},
+    {"IRET", ADDR_NOOP},
+    {"STSP", ADDR_DIRECT},
+    {"OUT", ADDR_INDIRECT},
+    {"LDSPL", ADDR_NOOP},
+    {"RCL", ADDR_NOOP},
+    {"RCR", ADDR_NOOP},
+    {"CMP", ADDR_INDIRECT},
+    {"IN", ADDR_DIRECT},
+    {"OUT", ADDR_DIRECT},
+    {"LDSPH", ADDR_NOOP},
+};
+
+// Instruction mnemonics
 std::set<std::string> mnemonics = {"JMP", "CLC", "STC", "CLI", "STI", "HLT", "INC", "DEC", "LOAD", "STORE", "ADD",
  "ADC", "SUB", "AND", "OR", "NOT", "NEG", "CMP", "NOP", "JO", "JNO", "JZ", "JE", "JNZ", "JNE", "JNAE", "JB", "JAE",
   "JNB", "JBE", "JNA", "JA", "JNBE", "JC", "JNC", "JS", "JNS", "SHL", "SHR", "ROL", "ROR", "RCL", "PUSH", "POP",
@@ -336,7 +399,7 @@ class Lexer{
             }
 
             if(pos == src.size() - 1){
-                std::cerr << "[Error] Found string with no closing quotes (\")" << std::endl;
+                std::cerr << "[Lexical error] Found string with no closing quotes (\")" << std::endl;
                 exit(1);
             }else{
                 advance();
@@ -400,7 +463,7 @@ class Lexer{
             }
 
             if(start == pos){
-                std::cerr << "[Error] Invalid number at line " << line << ", position " << col << std::endl;
+                std::cerr << "[Lexical error] Invalid number at line " << line << ", position " << col << std::endl;
                 exit(1);
             }
 
@@ -458,14 +521,14 @@ class Lexer{
                     tokens.push_back(read_directive());
                 }else if(c == '\n'){
                     // Endline
-                    tokens.push_back({TK_ENDLINE, "\n", line, col});
+                    tokens.push_back({TK_ENDLINE, "ENDLINE\n", line, col});
                     advance();
                 }else if(c == '\"'){
                     // String
                     advance();
                     tokens.push_back(read_string());
                 }else if(c == '#'){
-                    // Immediate value
+                    // ADDR_IMMEDIATE value
                     tokens.push_back({TK_HASH, "#", line, col});
                     advance();
                 }else if(c == '['){
@@ -484,12 +547,20 @@ class Lexer{
                     // Right parentheses
                     tokens.push_back({TK_RPARENTHESIS, ")", line, col});
                     advance();
-                }else if(c == '+' || c == '-' || c == '*' || c == '/'){
-                    // Arithmetic operator
-                    tokens.push_back({TK_ARITHMETIC_OP, std::string(1, c), line, col});
+                }else if(c == '+'){
+                    tokens.push_back({TK_PLUS, "+", line, col});
+                    advance();
+                }else if(c == '-'){
+                    tokens.push_back({TK_MINUS, "-", line, col});
+                    advance();
+                }else if(c == '*'){
+                    tokens.push_back({TK_MULTIPLY, "*", line, col});
+                    advance();
+                }else if(c == '/'){
+                    tokens.push_back({TK_DIVIDE, "/", line, col});
                     advance();
                 }else{
-                    std::cerr << "[Error] Unexpected character: " << c << " on line " << line << ", position " << col << std::endl;
+                    std::cerr << "[Lexical error] Unexpected character: " << c << " on line " << line << ", position " << col << std::endl;
                     exit(1);
                     advance();
                 }
@@ -502,10 +573,20 @@ class Lexer{
         void print(){
             for(size_t i = 0; i < tokens.size(); i++){
                 token_t token = tokens[i];
+                std::cout << "[" << i << "]->";
 
                 switch(token.type){
-                    case TK_ARITHMETIC_OP:
-                        std::cout << "TK_ARITHMETIC_OP:";
+                    case TK_PLUS:
+                        std::cout << "TK_PLUS:";
+                    break;
+                    case TK_MINUS:
+                        std::cout << "TK_MINUS:";
+                    break;
+                    case TK_MULTIPLY:
+                        std::cout << "TK_MULTIPLY:";
+                    break;
+                    case TK_DIVIDE:
+                        std::cout << "TK_DIVIDE:";
                     break;
                     case TK_DIRECTIVE:
                         std::cout << "TK_DIRECTIVE:";
@@ -552,52 +633,226 @@ class Lexer{
 };
 
 // Intermediate representation node
-enum kind_t {NODE_INSTRUCTION, NODE_DIRECTIVE, NODE_LABEL};
+enum ntype_t {NODE_INSTRUCTION, NODE_DIRECTIVE, NODE_BUFFER};
 struct irnode_t{
-    kind_t kind;
-    std::string mnemonic;
-    addr_t addressing;
-    std::string operand;
-    size_t size;
+    ntype_t type; // Node type
+    
+    /*
+    This vector of strings holds all the values needed for the IR node:
+    NODE_INSTRUCTION:   (0):Mnemonic    (1):Operand
+    NODE_DIRECTIVE:     (0):Mnemonic    (1):Operand     (2 or more):Other operands if necessary...
+    */
+    std::vector<std::string> values;
+    std::vector<uint8_t> buffer_numbers;
+
+    addr_t addressing; // Addressing mode of the instruction (if it is an instruction)
+    uint16_t address; // Calculated address
+    size_t size; // Size in bytes of this node
 };
 
 class Parser{
-    private:
-        std::vector<token_t> tokens;
-        size_t pos;
-        size_t location_counter;
+private:
+    std::map<std::string, size_t> unresolved_labels; // References the node in the vector of nodes that has the label unresolved
+    std::vector<token_t> tokens;
+    std::vector<irnode_t> nodes;
+    token_t token;
+    size_t pos;
+    uint16_t location_counter;
 
-    public:
-        Parser(std::vector<token_t> tokens):tokens(tokens), pos(0), location_counter(0){}
+    std::string to_string(uint16_t value, int base){
+    if (base < 2 || base > 16) {
+        error_invalid();
+    }
 
-        void parse(){
-            for(size_t i = 0; i < tokens.size(); i++){
-                token_t token = tokens[i];
+    if (value == 0) return "0";
 
-                switch(token.type){
-                    case TK_DIRECTIVE:
-                        if(token.value == "equ"){
-                            
-                        }
-                    break;
-                    case TK_IDENTIFIER:
+    std::string digits = "0123456789ABCDEF";
+    std::string result;
 
-                    break;
-                    case TK_ENDLINE:
+    while (value > 0) {
+        int digit = value % base;
+        result.insert(result.begin(), digits[digit]);
+        value /= base;
+    }
 
-                    break;
-                    case TK_LABEL:
+    return result;
+}
 
-                    break;
-                    case TK_END:
-                        // Do nothing, it's the end of the file
-                    break;
-                    default:
-                        std::cerr << "[Error] Unexpected token \"" << token.value << "\" at line " << token.line << ", column " << token.column << std::endl;
-                    break;
+    bool advance(){
+        if(pos < tokens.size()){
+            pos++;
+            token = tokens[pos];
+            std::cout << " " << token.value;
+            return true;
+        }else{
+            return false;
+        }
+    }
+
+    bool expect(ttype_t t){
+        if(token.type == t){
+            return true;
+        }else{
+            error_unexpected();
+            return false;
+        }
+    }
+
+    void error_unexpected(){
+        std::cerr << "[Parsing error] Unexpected token \"" << token.value << "\" at line " << token.line << ", column " << token.column << std::endl;
+    }
+
+    void error_invalid(){
+        std::cerr << "[Parsing error] Invalid token \"" << token.value << "\" at line " << token.line << ", column " << token.column << std::endl;
+    }
+
+    void error_reserved(){
+        std::cerr << "[Parsing error]: User-defined symbol " << token.value << " is a reserved word" << std::endl;
+    }
+public:
+    Parser(std::vector<token_t> tokens):tokens(tokens), pos(0), location_counter(0){
+        if(tokens.size() > 0){
+            token = tokens[0];
+        }
+    }
+    
+    uint16_t parse_expression(uint16_t& accumulator){
+        switch(token.type){
+            case TK_PLUS:
+                advance();
+                accumulator += parse_expression(accumulator);
+            break;
+            case TK_MINUS:
+                advance();
+                accumulator -= parse_expression(accumulator);
+            break;
+            case TK_NUMBER:{
+                token_t token_number = token;
+
+                advance();
+                if(token.type == TK_PLUS){
+                    return strto16(token_number.value) + parse_expression(accumulator);
+                }else if(token.type == TK_MINUS){
+                    return strto16(token_number.value) - parse_expression(accumulator);
+                }else if(token.type == TK_NUMBER){
+                    return strto16(token_number.value);
+                }else if(token.type != TK_ENDLINE){
+                    error_unexpected();
                 }
             }
-        };
+            break;
+            case TK_END:
+            case TK_ENDLINE:
+            advance();
+                // Do nothing more
+            break;
+            default:
+                advance();
+                error_unexpected();
+            break;
+        }
+        return 0;
+    }
+
+    std::vector<irnode_t> parse(){
+        // First pass
+        std::cout << "[Info]: Parsing token(s) " << token.value;
+        while(token.type != TK_END){            
+            switch(token.type){
+                case TK_DIRECTIVE:
+                    if(token.value == "equ"){
+                        advance();
+                        // First symbol must be an identifier and not a reserved word
+                        if(token.type != TK_IDENTIFIER) error_unexpected();
+                        if(mnemonics.find(token.value) != mnemonics.end()) error_reserved();
+                        
+                        // Symbol identifier
+                        std::string symbol_identifer = token.value;
+                        advance();
+
+                        // Next symbol must be a label or a number
+                        if(token.type == TK_IDENTIFIER){
+                            // Convert the label to an address and add it to the symbol table
+                            if(labels.find(token.value) == labels.end()){
+                                // Label not found, resolve it later
+                                unresolved_labels[token.value] = pos;
+                            }else{
+                                // Label found
+                                symbol_table[symbol_identifer] = labels[token.value];
+                            }
+                        }else if(token.type == TK_NUMBER || token.type == TK_PLUS || token.type == TK_MINUS){
+                            uint16_t number = 0;
+                            parse_expression(number);
+                        }else{
+                            error_invalid();
+                        }
+
+                        advance();
+                        //expect(TK_ENDLINE);
+                    }else if(token.value == "org"){
+                        advance();
+                        if(token.type == TK_NUMBER){
+                            location_counter = strto16(token.value);
+                        }else{
+                            error_unexpected();
+                        }
+
+                        advance();
+                        expect(TK_ENDLINE);
+                    }else if(token.value == "d8"){
+                        // Get all bytes
+                        uint16_t start_location_counter = location_counter;
+                        advance();
+                        std::vector<uint8_t> numbers;
+                        while(token.type == TK_NUMBER){
+                            numbers.push_back(strto8(token.value));
+                            location_counter++;
+                            advance();
+                        }
+                        nodes.push_back({NODE_BUFFER, {"d8"}, numbers, ADDR_DIRECT, start_location_counter, numbers.size()});
+                    }else if(token.value == "d16"){
+                        // Get all double bytes
+                        uint16_t start_location_counter = location_counter;
+                        advance();
+                        std::vector<uint8_t> numbers;
+                        while(token.type == TK_NUMBER){
+                            numbers.push_back(strto8(token.value)&0xFF); // Low byte
+                            location_counter++;
+                            numbers.push_back((strto8(token.value) >> 8)&0xFF); // High byte
+                            location_counter++;
+                            advance();
+                        }
+                        nodes.push_back({NODE_BUFFER, {"d16"}, numbers, ADDR_DIRECT, start_location_counter, numbers.size()});
+                    }
+                break;
+                case TK_IDENTIFIER:
+                    advance();
+                break;
+                case TK_ENDLINE:
+                    advance();
+                break;
+                case TK_LABEL:{
+                    std::string label_value = token.value;
+                    if(labels.find(label_value) == labels.end()){
+                        labels[label_value] = location_counter;
+                    }else{
+                        std::cerr << "Label " << label_value << " already defined" << std::endl;
+                    }
+
+                    advance();
+                }
+                
+                break;
+                default:
+                    error_unexpected();
+                break;
+            }
+            
+            std::cout << "[Info]: Parsing token(s)";
+            advance();
+        }
+        return std::vector<irnode_t>();
+    };
 };
 
 int main(int argc, char* argv[]){
@@ -617,20 +872,22 @@ int main(int argc, char* argv[]){
     // Open output file
     std::ofstream output_file(output_filename, std::ios::binary);
     if(!output_file.is_open()){
-        std::cerr << "[Error] Cannot open output file: " << output_filename << std::endl;
+        std::cerr << "[File error] Cannot open output file: " << output_filename << std::endl;
         return 1;
     }
-
+    
     // Tokenize
     Lexer lexer(source_filename);
     std::vector<token_t> tokens = lexer.tokenize();
-    lexer.print();
-
+    
     // Parse
     Parser parser(tokens);
-    parser.parse();
+    std::vector<irnode_t> nodes = parser.parse();
 
     // Assemble
+
+    // TEST
+    std::vector<token_t> subtokens(tokens.begin() + 161, tokens.begin() + 176);
 
     // Close files
     output_file.close();

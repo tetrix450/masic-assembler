@@ -1,3 +1,4 @@
+.equ ejemplo 1200
 .org 0x0000; vectores de interrupción, comenzando por el vector de reset
 
 reset:
@@ -59,7 +60,7 @@ load #0
     cmp doscientoscincuentaycinco
     jnz bucle
 
-store #20 + (30/3*(2-20))+1
+store #20 + 30
 load #-20
 
 SUMAR direccion1 dato+2
@@ -68,3 +69,6 @@ SUMAR 0x0000 buffer8
 .org 0x2000; zona de variables (RAM)
 puntero:
 .d16 0x0000
+
+ejemplo:
+.d8 0x01 0x02 0x03 4 5 6 7 0b00001000
