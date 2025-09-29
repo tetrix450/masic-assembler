@@ -1,4 +1,4 @@
-.equ ejemplo 1200
+.equ ejemplo +1000 -400*2 +(2*3 -5)
 .org 0x0000; vectores de interrupción, comenzando por el vector de reset
 
 reset:
@@ -10,7 +10,7 @@ buffer8: .r8 40
 buffer16: .r16 10
 
 .ascii "Hola EMASIC"
-.equ doscientoscincuentaycinco #0xFF
+.equ doscientoscincuentaycinco 0xFF
 .equ direccion1000 1000
 
 .macro SUMAR op1 op2
@@ -57,11 +57,12 @@ load #0
         store [puntero]
         call inc_puntero
         inc
-    cmp doscientoscincuentaycinco
+    cmp #doscientoscincuentaycinco
     jnz bucle
 
-store #20 + 30
+store #-20 + 30 -4
 load #-20
+load puntero + (8 * 2 - 4) + 1
 
 SUMAR direccion1 dato+2
 SUMAR 0x0000 buffer8
