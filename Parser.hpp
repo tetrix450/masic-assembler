@@ -1,37 +1,43 @@
 #ifndef PARSER_HPP
 #define PARSER_HPP
-#include <vector>
 #include "DataStructures.hpp"
 #include <map>
-
-// ########################################################
-// ####################### PARSER #########################
-// ########################################################
 
 class Parser{
 private:
     std::vector<token_t> tokens; // Tokens to parse
-    std::vector<irnode_t*> nodes; // All nodes after parsing
-    std::map<std::string, macro_t> macros;
     token_t token; // Actual token being parsed
-    size_t pos = 0; // Position currently parsing
-    uint16_t location_counter = 0; // Necessary for label calculation
-    uint32_t instantiated_macros = 0; // Number of expanded macros (necessary to make labels unique after expansion)
+    size_t pos = 0; // Position in the token list currently being parsed 
 
-    Parser(std::vector<token_t> tokens);
-    irnode_t* create_node(token_t t, addr_t addressing, size_t size);
-    void show_token();
+    std::vector<irnode_t*> nodes; // Parsed nodes
+
+    uint16_t location_counter = 0; // Necessary for label calculation
+    uint32_t expanded_macros = 0; // Number of expanded macros (necessary to make labels unique after expansion)
+    
+    std::map<std::string, size_t> equ_table; // equ -> start of expression in token list
+    std::map<std::string, uint16_t> label_table; // Label -> address
+    std::map<std::string, macro_t> macros;
+
+    irnode_t* createNode(token_t t, size_t size);
     bool advance();
     void expect(std::vector<ttype_t> types);
-    void error_show_line(token_t t);
-    void error_unexpected(std::string expected);
-    void error_invalid();
-    void error_recursive_macro_expansion(token_t t);
+    void error(token_t t, std::string message);
+    bool isMnemonic(std::string value);
+    uint8_t getOpcode(token_t t, addr_t addressing);
+    uint16_t strto16(const std::string& input);
+
+    // Expression evaluation
+    int parseFactor(bool permit_labels);
+    int parseTerm(bool permit_labels);
+    int parseExpression(bool permit_labels);
+    void skipExpression();
     
-
 public:
+    // Constructor and destructor
+    Parser(std::vector<token_t> tokens);
+    ~Parser();
 
+    std::vector<irnode_t*> parse();
 };
-
 
 #endif

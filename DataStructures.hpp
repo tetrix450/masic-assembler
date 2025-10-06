@@ -46,8 +46,14 @@ struct macro_t{ // Macro
 struct irnode_t{ // Intermediate representation node
     token_t token; // Main token
     addr_t addressing; // Addressing mode of the instruction (if it is an instruction)
-    std::vector<size_t> expressions; // Expression positions to be evaluated later
+    std::vector<size_t> expressions; // Expression positions to be evaluated
     size_t size;
+};
+
+struct inst_t{
+    std::string mnemonic;
+    addr_t addressing;
+    uint8_t opcode;
 };
 
 #endif

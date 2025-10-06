@@ -35,7 +35,7 @@ int Lexer::advance(){
     }
     return pos++;
 }
-token_t Lexer::read_identifier_or_label(){
+token_t Lexer::readIdentifierOrLabel(){
     size_t start = pos;
     size_t start_col = col;
 
@@ -56,7 +56,7 @@ token_t Lexer::read_identifier_or_label(){
     // It is an identifier
     return {TK_IDENTIFIER, value, line, start_col};
 }
-token_t Lexer::read_directive(){
+token_t Lexer::readDirective(){
     size_t start = pos;
     size_t start_col = col;
     
@@ -71,7 +71,7 @@ token_t Lexer::read_directive(){
     // Return the token
     return {TK_DIRECTIVE, value, line, start_col};
 }
-token_t Lexer::read_string(){
+token_t Lexer::readString(){
     size_t start = pos;
     size_t start_col = col;
     
@@ -92,7 +92,7 @@ token_t Lexer::read_string(){
 
     return {TK_STRING, value, line, start_col};
 }
-token_t Lexer::read_number(){
+token_t Lexer::readNumber(){
     size_t start = pos;
     size_t start_col = col;
 
@@ -163,14 +163,14 @@ std::vector<token_t> Lexer::tokenize(){
             advance();
         }else if (isdigit(c)) {
             // If it starts with a number or a sign followed by a number, then it's a number
-            tokens.push_back(read_number());
+            tokens.push_back(readNumber());
         }else if(isalnum(c) || c == '_'){
             // Identifier or label
-            tokens.push_back(read_identifier_or_label());
+            tokens.push_back(readIdentifierOrLabel());
         }else if(c == '.'){
             // Directive
             advance();
-            tokens.push_back(read_directive());
+            tokens.push_back(readDirective());
         }else if(c == '\n'){
             // Endline
             tokens.push_back({TK_ENDLINE, "\\n", line, col});
@@ -178,7 +178,7 @@ std::vector<token_t> Lexer::tokenize(){
         }else if(c == '\"'){
             // String
             advance();
-            tokens.push_back(read_string());
+            tokens.push_back(readString());
         }else if(c == '#'){
             // ADDR_IMMEDIATE value
             tokens.push_back({TK_HASH, "#", line, col});
@@ -227,6 +227,11 @@ std::vector<token_t> Lexer::tokenize(){
     return tokens;
 }
 void Lexer::print(){
+    std::string token_name[] = {"IDENTIFIER", "NUMBER", "STRING", "DIRECTIVE", "LABEL", "LBRACKET", "RBRACKET",
+    "ENDLINE", "PLUS", "MINUS", "MULTIPLY", "DIVIDE", "LPAREN", "RPAREN", "HASH", "END",
+    "COMMA", "PERCENT", "INVALID"
+    };
+
     for(size_t i = 0; i < tokens.size(); i++){
         token_t token = tokens[i];
         std::cout << "[" << i << "]->" << token_name[tokens[i].type] << ":" << token.value << " ";

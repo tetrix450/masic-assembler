@@ -10,7 +10,7 @@ buffer8: .r8 40
 buffer16: .r16 10
 
 cadena: .ascii "Hola EMASIC"
-.equ doscientoscincuentaycinco 0xFF
+.equ doscientoscincuentaycinco 0xFF+inc_puntero;
 .equ direccion1000 1000
 
 .org 0x0100; código del programa (ROM)
@@ -47,4 +47,4 @@ puntero:
 .d16 0x0000
 
 ejemplo:
-.d8 0x01 0x02 0x03 4 5 6 7 0b00001000
+.d8 0x01, 0x02, 0x03, 4, 5, 6, 7, 0b00001000

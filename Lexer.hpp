@@ -17,10 +17,10 @@ class Lexer{
         std::vector<token_t> tokens; // All the tokens in the program
 
         int advance(); // Advance cursor one character
-        token_t read_identifier_or_label();
-        token_t read_directive();
-        token_t read_string();
-        token_t read_number();
+        token_t readIdentifierOrLabel();
+        token_t readDirective();
+        token_t readString();
+        token_t readNumber();
 
     public:
         Lexer(std::string source_filename);
