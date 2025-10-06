@@ -6,11 +6,13 @@
 #include <stdexcept>
 #include <cstdint>
 #include <limits>
-#include <set>
+#include <algorithm>
 
 // ########################################################
 // ################ Datatypes & structs ###################
 // ########################################################
+
+uint32_t instantiated_macros = 0;
 
 enum ttype_t{ // Token type
     TK_IDENTIFIER, TK_NUMBER, TK_STRING, TK_DIRECTIVE, TK_LABEL, TK_LBRACKET,
@@ -28,28 +30,18 @@ struct token_t{ // Token
     size_t line, column;
 };
 
-struct csymbol_t{ // Constant symbol
-    std::vector<token_t> expression;
-    uint16_t value;
-};
-
 struct macro_t{ // Macro
-    std::vector<std::string> arguments;
+    std::vector<std::string> parameters;
     std::vector<token_t> body;
-    std::map<std::string, uint16_t> llabels; // Local labels inside the macro
+    std::vector<std::string> labels; // Local labels inside the macro
 };
 
 struct irnode_t{ // Intermediate representation node
     std::string identifier; // Instruction mnemonic, directive identifier...
+    std::vector<size_t> expressions; // Expression positions to be evaluated later
     addr_t addressing; // Addressing mode of the instruction (if it is an instruction)
     uint16_t location; // Calculated address
-    size_t size; // Size in bytes of this node
-};
-
-struct expr_t{
-    size_t start; // Expression start in token list
-    irnode_t* node; // Node to store the expression result in
-    std::string csymbol; // Constant symbol to store the expression result in
+    size_t size;
 };
 
 // ########################################################
@@ -59,14 +51,12 @@ struct expr_t{
 std::string token_name[] = {"IDENTIFIER", "NUMBER", "STRING", "DIRECTIVE", "LABEL", "LBRACKET", "RBRACKET",
 "ENDLINE", "PLUS", "MINUS", "MULTIPLY", "DIVIDE", "LPAREN", "RPAREN", "HASH", "END", "COMMA", "PERCENT", "INVALID"
 };
-std::set<std::string> directives = {"d8", "d16", "r8", "r16", "org", "macro","endm", "equ", "ascii"};
 
 // ########################################################
 // ##################### Tables ###########################
 // ########################################################
 
-std::vector<expr_t> expressions;
-std::map<std::string, csymbol_t> symbol_table;
+std::map<std::string, size_t> symbol_table; // Stores position of the start of the expression, to be evaluated after all labels are calculated
 std::map<std::string, uint16_t> labels;
 std::map<std::string, macro_t> macros;
 
@@ -147,10 +137,29 @@ std::vector<inst_t> instructions = {
     {"OUT", ADDR_DIRECT, 0x3E},
     {"LDSPH", ADDR_NOOP, 0x3F},
 };
+
 // ########################################################
 // ##################### Checkers #########################
 // ########################################################
+
+template<typename T>
+bool contains(std::vector<T> v, T element){
+    for(size_t i = 0; i < v.size(); i++){
+        if(v[i] == element){
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string to_upper(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c){ return std::toupper(c); });
+    return s;
+}
+
 bool is_instruction(std::string value){
+    value = to_upper(value);
     for(size_t i = 0; i < instructions.size(); i++){
         if(instructions[i].mnemonic == value){
             return true;
@@ -166,6 +175,11 @@ bool is_macro(std::string value){
     return false;
 }
 
+void error_addressing(token_t t){
+    std::cerr << "(" << t.line << ", " << t.column << ") [Parsing error]: Incorrect addressing for instruction " << t.value << " at line " << t.line << ", column " << t.column << std::endl;
+    exit(1);
+}
+
 uint8_t get_opcode(std::string mnemonic, addr_t addressing){
     for(size_t i = 0; i < instructions.size(); i++){
         if(instructions[i].mnemonic == mnemonic && instructions[i].addressing == addressing){
@@ -173,6 +187,7 @@ uint8_t get_opcode(std::string mnemonic, addr_t addressing){
         }
     }
     // Not found
+    error_addressing();
     return 0xFF;
 }
 // ########################################################
@@ -314,8 +329,7 @@ uint16_t strto16(const std::string &input){
     }
 }
 
-// This is where all the source code is stored as tokens
-std::vector<struct token_t> program;
+
 
 // ########################################################
 // ######################## LEXER #########################
@@ -357,11 +371,11 @@ class Lexer{
             // It is a label
             if(pos < src.size() && src[pos] == ':'){
                 advance();
-                return {TK_LABEL, value, start + 1, start_col};
+                return {TK_LABEL, value, line, start_col};
             }
 
             // It is an identifier
-            return {TK_IDENTIFIER, value, start + 1, start_col};
+            return {TK_IDENTIFIER, value, line, start_col};
         }
 
         token_t read_directive(){
@@ -377,7 +391,7 @@ class Lexer{
             std::string value = src.substr(start, pos - start);
 
             // Return the token
-            return {TK_DIRECTIVE, value, start + 1, start_col};
+            return {TK_DIRECTIVE, value, line, start_col};
         }
 
         token_t read_string(){
@@ -390,7 +404,7 @@ class Lexer{
             }
 
             if(pos == src.size() - 1){
-                std::cerr << "[Lexical error] Found string with no closing quotes (\")" << std::endl;
+                std::cerr << "(" << line << ", " << col << ") [Lexical error] Found string with no closing quotes (\")" << std::endl;
                 exit(1);
             }else{
                 advance();
@@ -399,7 +413,7 @@ class Lexer{
             // Get the directive string
             std::string value = src.substr(start, pos - start - 1);
 
-            return {TK_STRING, value, start + 1, start_col};
+            return {TK_STRING, value, line, start_col};
         }
 
         token_t read_number(){
@@ -454,7 +468,7 @@ class Lexer{
             }
 
             if(start == pos){
-                std::cerr << "[Lexical error] Invalid number at line " << line << ", position " << col << std::endl;
+                std::cerr << "(" << line << ", " << col << ") [Lexical error] Invalid number" << std::endl;
                 exit(1);
             }
 
@@ -492,7 +506,6 @@ class Lexer{
         }
 
         std::vector<token_t> tokenize(){
-
             // Read character by character and tokenize all the program
             while(pos < src.size()){
                 char c = src[pos];
@@ -512,7 +525,7 @@ class Lexer{
                     tokens.push_back(read_directive());
                 }else if(c == '\n'){
                     // Endline
-                    tokens.push_back({TK_ENDLINE, "ENDLINE", line, col});
+                    tokens.push_back({TK_ENDLINE, "\\n", line, col});
                     advance();
                 }else if(c == '\"'){
                     // String
@@ -555,10 +568,10 @@ class Lexer{
                     advance();
                 }else if(c == '%'){
                     tokens.push_back({TK_PERCENT, "%", line, col});
-                }else{
-                    std::cerr << "[Lexical error] Unexpected character: " << c << " on line " << line << ", position " << col << std::endl;
-                    exit(1);
                     advance();
+                }else{
+                    std::cerr << "(" << line << ", " << col << ") [Lexical error] Unexpected character: " << c << std::endl;
+                    exit(1);
                 }
             }
 
@@ -569,67 +582,10 @@ class Lexer{
         void print(){
             for(size_t i = 0; i < tokens.size(); i++){
                 token_t token = tokens[i];
-                std::cout << "[" << i << "]->";
-
-                switch(token.type){
-                    case TK_PLUS:
-                        std::cout << "TK_PLUS:";
-                    break;
-                    case TK_MINUS:
-                        std::cout << "TK_MINUS:";
-                    break;
-                    case TK_MULTIPLY:
-                        std::cout << "TK_MULTIPLY:";
-                    break;
-                    case TK_DIVIDE:
-                        std::cout << "TK_DIVIDE:";
-                    break;
-                    case TK_DIRECTIVE:
-                        std::cout << "TK_DIRECTIVE:";
-                    break;
-                    case TK_ENDLINE:
-                        std::cout << "TK_ENDLINE" << std::endl;
-                    break;
-                    case TK_HASH:
-                        std::cout << "TK_HASH:";
-                    break;
-                    case TK_LABEL:
-                        std::cout << "TK_LABEL:";
-                    break;
-                    case TK_LBRACKET:
-                        std::cout << "TK_LBRACKET:";
-                    break;
-                    case TK_RBRACKET:
-                        std::cout << "TK_RBRACKET:";
-                    break;
-                    case TK_LPARENTHESIS:
-                        std::cout << "TK_LPARENTHESIS:";
-                    break;
-                    case TK_RPARENTHESIS:
-                        std::cout << "TK_RPARENTHESIS:";
-                    break;
-                    case TK_NUMBER:
-                        std::cout << "TK_NUMBER:";
-                    break;
-                    case TK_STRING:
-                        std::cout << "TK_STRING:";
-                    break;
-                    case TK_IDENTIFIER:
-                        std::cout << "TK_IDENTIFIER:";
-                    break;
-                    case TK_INVALID:
-                        std::cout << "TK_INVALID:";
-                    break;
-                    case TK_COMMA:
-                        std::cout << "TK_COMMA:";
-                    break;
-                    default:
-                        std::cout << "TK_END" << std::endl;
-                    break;
+                std::cout << "[" << i << "]->" << token_name[tokens[i].type] << ":" << token.value << " ";
+                if(tokens[i].type == TK_ENDLINE){
+                    std::cout << std::endl;
                 }
-
-                if(token.type != TK_ENDLINE && token.type != TK_END)
-                std::cout << token.value << " ";
             }
         }
 };
@@ -648,24 +604,57 @@ private:
 
     // ###############################################
 
-    irnode_t* create_node(std::string identifier, addr_t addressing, uint16_t location, size_t size){
-        irnode_t* node = new irnode_t{identifier, addressing, location, size};
+    irnode_t* create_node(std::string identifier, size_t size){
+        irnode_t* node = new irnode_t{identifier, {}, ADDR_NOOP, location_counter, size};
         nodes.push_back(node);
         return node;
     }
 
+    void show_token(){
+        std::cout << "(" << token.line << ", " << token.column << ") " << token_name[token.type] << ":" << token.value << " ";
+
+        if(token.type == TK_ENDLINE || token.type == TK_END){
+            std::cout << std::endl;
+        }
+    }
+
     bool advance(){
-        if(pos < tokens.size()){
+        if(pos < tokens.size() - 1){
             pos++;
             token = tokens[pos];
+            
+            //show_token();
 
-            std::cout << " " << token_name[token.type] << ":" << token.value;
-            if(token.type == TK_ENDLINE || token.type == TK_END){
-                std::cout << std::endl;
-            }
             return true;
         }else{
             return false;
+        }
+    }
+
+    void expect(std::vector<ttype_t> types){
+        if(types.size() == 1){ // Single type expected
+            if(token.type == types[0]){
+                return;
+            }
+            error_unexpected(token_name[types[0]]);
+        }else{ // Multiple types expected
+            std::string exp = "";
+            for(size_t i = 0; i < types.size(); i++){
+                // Return if token is expected
+                if(token.type == types[i]){
+                    return;
+                }
+                
+                // Construct string of expected identifiers
+                if(i < types.size() - 2){
+                    exp += token_name[types[i]] + ", ";
+                }else{
+                    exp += " or " + token_name[types[i]];
+                }
+            }
+            
+            // Throw an error showing what the parser expected
+            error_unexpected(exp);
         }
     }
 
@@ -674,37 +663,47 @@ private:
     // ###############################################
 
     void error_unexpected(std::string expected){
-        std::cerr << "[Parsing error] Unexpected token \"" << token.value << "\": expected " << expected << " at line " << token.line << ", column " << token.column << std::endl;
+        std::cerr << "(" << token.line << ", " << token.column << ") [Parsing error] Unexpected " << token_name[token.type] << " \"" << token.value << "\": expected " << expected << std::endl;
         exit(1);
     }
 
     void error_invalid(){
-        std::cerr << "[Parsing error] Invalid token \"" << token.value << "\" at line " << token.line << ", column " << token.column << std::endl;
+        std::cerr << "(" << token.line << ", " << token.column << ") [Parsing error] Invalid token \"" << token.value << "\"" << std::endl;
         exit(1);
     }
 
-    void error_redefined_label(std::string label_value){
-        std::cerr << "Label " << label_value << " already defined" << std::endl;
+    void error_recursive_macro_expansion(token_t t){
+        std::cerr << "(" << t.line << ", " << t.column << ") [Parsing error] Infinitely recursive macro expansion \"" << t.value << std::endl;
+        exit(1);
+    }
+
+    void error_redefined_label(token_t t){
+        std::cerr << "(" << t.line << ", " << t.column << ") [Parsing error] Label " << t.value << " is already defined" << std::endl;
+        exit(1);
+    }
+
+    void error_redefined_symbol(token_t t){
+        std::cerr << "(" << t.line << ", " << t.column << ") [Parsing error] Symbol " << t.value << " already defined" << std::endl;
+        exit(1);
+    }
+
+    void error_redefined_macro(token_t t){
+        std::cerr << "(" << t.line << ", " << t.column << ") [Parsing error] Macro " << t.value << std::endl;
         exit(1);
     }
 
     void error_reserved(){
-        std::cerr << "[Parsing error]: User-defined symbol " << token.value << " is a reserved word" << std::endl;
+        std::cerr << "(" << token.line << ", " << token.column << ") [Parsing error]: Tried to define " << token.value << ", which is a reserved word" << std::endl;
         exit(1);
     }
 
-    void error_addressing(std::string mnemonic){
-        std::cerr << "[Parsing error]: Incorrect addressing for instruction " << mnemonic << " at line " << token.line << ", column " << token.column << std::endl;
+    void error_unrecognized_identifier(token_t t){
+        std::cerr << "(" << t.line << ", " << t.column << ") [Parsing error]: Unrecognized identifier \"" << t.value << "\"" << std::endl;
         exit(1);
     }
 
-    void error_unrecognized_directive(){
-        std::cerr << "[Parsing error]: Unrecognized directive " << token.value << " at line " << token.line << ", column " << token.column << std::endl;
-        exit(1);
-    }
-
-    void error_undefined_label(token_t t){
-        std::cerr << "[Parsing error]: Undefined label \"" << t.value << "\" at line " << t.line << ", column " << t.column << std::endl;
+    void error_unrecognized_directive(token_t t){
+        std::cerr << "(" << t.line << ", " << t.column << ") [Parsing error]: Unrecognized directive \"" << t.value << "\"" << std::endl;
         exit(1);
     }
 
@@ -712,15 +711,32 @@ private:
     // ########## EXPRESSION EVALUATION ##############
     // ###############################################
 
-    // A factor is a number or a parenthesis
-    int parse_factor(){
+    // A factor is a number, label, symbol or a parenthesis
+    int parse_factor(bool permit_labels){
         if(token.type == TK_NUMBER){
             int value = strto16(token.value);
             advance();
             return value;
+        }else if(token.type == TK_IDENTIFIER){
+            int value;
+            if(symbol_table.find(token.value) != symbol_table.end()){
+                value = symbol_table[token.value];
+            }else if(labels.find(token.value) != labels.end()){
+                if(permit_labels){
+                    value = labels[token.value];
+                }else{
+                    std::cerr << "(" << token.line << ", " << token.column << ") [Parsing error] labels are not permited in the expression on line " << token.line << std::endl;
+                    exit(1);
+                }
+            }else{
+                std::cerr << "(" << token.line << ", " << token.column << ") [Parsing error]: Undefined symbol or label " << token.value << std::endl;
+                exit(1);
+            }
+            advance();
+            return value;
         }else if(token.type == TK_LPARENTHESIS){
             advance();
-            int value = parse_expression();
+            int value = parse_expression(permit_labels);
             if(token.type != TK_RPARENTHESIS){
                 error_unexpected(")");
             }
@@ -728,10 +744,10 @@ private:
             return value;
         }else if(token.type == TK_PLUS){
             advance();
-            return parse_factor();
+            return parse_factor(permit_labels);
         }else if(token.type == TK_MINUS){
             advance();
-            return -parse_factor();
+            return -parse_factor(permit_labels);
         }else{
             error_unexpected("a NUMERICAL EXPRESSION");
             return 0;
@@ -739,13 +755,13 @@ private:
     }
 
     // A term is a product or quotient of factors
-    int parse_term(){
-        int value = parse_factor();
+    int parse_term(bool permit_labels){
+        int value = parse_factor(permit_labels);
 
         while(token.type == TK_MULTIPLY || token.type == TK_DIVIDE){
             int op = token.type;
             advance();
-            int rhs = parse_factor();
+            int rhs = parse_factor(permit_labels);
 
             if(op == TK_MULTIPLY) value *= rhs;
             else if(op == TK_DIVIDE) value /= rhs;
@@ -754,13 +770,13 @@ private:
     }
 
     // An expression is a sum of terms
-    int parse_expression(){
-        int value = parse_term();
+    int parse_expression(bool permit_labels){
+        int value = parse_term(permit_labels);
 
         while(token.type == TK_PLUS || token.type == TK_MINUS){
             int op = token.type;
             advance();
-            int rhs = parse_term();
+            int rhs = parse_term(permit_labels);
 
             if(op == TK_PLUS) value += rhs;
             else if(op == TK_MINUS) value -= rhs;
@@ -768,17 +784,25 @@ private:
         return value;
     }
 
-    void store_expression(irnode_t* node){
-        switch(token.type){
-            case TK_NUMBER:
-            case TK_PLUS:
-            case TK_MINUS:
-            case TK_LPARENTHESIS:
-                // Evaluate the expression later, when labels are resolved
-                expressions.push_back({pos,node, ""});
-            break;
-            default:
-                error_unexpected("NUMERICAL EXPRESSION");
+    // Advance cursor until end of expression
+    void skip_expression(){
+        bool keep_going = true;
+        while(keep_going){
+            switch(token.type){
+                case TK_NUMBER:
+                case TK_PLUS:
+                case TK_MINUS:
+                case TK_MULTIPLY:
+                case TK_DIVIDE:
+                case TK_LPARENTHESIS:
+                case TK_RPARENTHESIS:
+                case TK_IDENTIFIER:
+                    advance();
+                break;
+                default:
+                    keep_going = false;
+                break;
+            }
         }
     }
 
@@ -794,92 +818,168 @@ public:
     }
 
     ~Parser(){ // Free dynamic memory
-        for(int i = nodes.size() - 1; i > 0; i--){
+        for(int i = nodes.size() - 1; i >= 0; i--){
             delete nodes[i];
         }
     }
 
-    std::vector<irnode_t*> parse(){
-        // First pass
+    std::vector<uint8_t> parse(){ // Returns machine code
+        //show_token();
+        // Go through all the tokens
         while(token.type != TK_END){
             switch(token.type){
                 case TK_DIRECTIVE:
-                    if(token.value == "equ"){
+                    if(token.value == "equ"){ //.equ identifier expression
+                        
                         advance();
+                        
+                        expect({TK_IDENTIFIER});
+                        std::string symbol_identifier = token.value;
+                        
+                        advance();
+                        
+                        // Check if the symbol is not defined yet
+                        if(symbol_table.find(symbol_identifier) == symbol_table.end()){
 
-                        if(token.type == TK_IDENTIFIER){
-                            std::string symbol = token.value;
-                            advance();
-                            switch(token.type){
+                            switch(token.type){ // Check if it is the start of an expression
                                 case TK_NUMBER:
                                 case TK_PLUS:
                                 case TK_MINUS:
                                 case TK_LPARENTHESIS:
-                                    // Evaluate the expression later, when labels are resolved
-                                    expressions.push_back({pos,NULL, symbol});
+                                case TK_IDENTIFIER:
+                                        symbol_table[symbol_identifier] = pos;
+                                        skip_expression();
                                 break;
                                 default:
                                     error_unexpected("NUMERICAL EXPRESSION");
                             }
+
                         }else{
-                            error_unexpected("IDENTIFIER");
+                            error_redefined_symbol(token);
                         }
-                    }else if(token.value == "org"){
+                    }else if(token.value == "org"){ // .org constant_expression
+                        
                         advance();
+                        
                         // Evaluate expression and change location counter
                         switch(token.type){
                             case TK_NUMBER:
                             case TK_PLUS:
                             case TK_MINUS:
                             case TK_LPARENTHESIS:
-                                location_counter = parse_expression();
+                                location_counter = parse_expression(false);
                             break;
                             default:
-                                error_unexpected("NUMERICAL EXPRESSION");
+                                error_unexpected("CONSTANT NUMERICAL EXPRESSION");
                         }
-                    }else if(token.value == "d8"){
-                        irnode_t* node = create_node("d8", ADDR_NOOP, location_counter, 0);
+                    }else if(token.value == "d8" || token.value == "d16"){ // .d8/d16 expression, expression, ...
+                        irnode_t* node = create_node(token.value, 0);
 
-                        while(token.type != TK_ENDLINE || token.type != TK_END){
-                            advance();
-                            store_expression(node);
-                            node->size++;
-                            advance();
+                        advance();
+                        do{
+                            // Expect start of a numerical expression
+                            expect({TK_IDENTIFIER, TK_NUMBER, TK_PLUS, TK_MINUS, TK_LPARENTHESIS});
+
+                            // Evaluate the expression later, when labels are resolved
+                            node->expressions.push_back(pos);
+                            skip_expression();
+
+                            // Make room for the expression result in the node
+                            if(node->identifier == "d8"){
+                                node->size++;
+                            }else{
+                                node->size += 2;
+                            }
+                            
+                            // Exit the loop when no more expressions are found
                             if(token.type != TK_COMMA){
                                 break;
                             }
-                        }
-                    }else if(token.value == "d16"){
-                        irnode_t* node = create_node("d16", ADDR_NOOP, location_counter, 0);
+                        }while(advance());
 
-                        while(token.type != TK_ENDLINE || token.type != TK_END){
-                            advance();
-                            store_expression(node);
-                            node->size += 2;
-                            advance();
-                            if(token.type != TK_COMMA){
-                                break;
-                            }
+                        location_counter += node->size;
+
+                    }else if(token.value == "r8" || token.value == "r16"){
+                        irnode_t* node = create_node(token.value, 0);
+                        advance();
+
+                        // Evaluate expression and reserve bytes
+                        switch(token.type){
+                            case TK_NUMBER:
+                            case TK_PLUS:
+                            case TK_MINUS:
+                            case TK_LPARENTHESIS:
+                                if(token.value == "r8"){
+                                    node->size = parse_expression(false);
+                                }else{
+                                    node->size = 2*parse_expression(false);
+                                }
+                            break;
+                            default:
+                                error_unexpected("CONSTANT NUMERICAL EXPRESSION");
                         }
-                    }else if(token.value == "r8"){
-                        
-                    }else if(token.value == "r16"){
-                        
+
+                        location_counter += node->size;
+
                     }else if(token.value == "ascii"){
-                        
+                        advance();
+                        expect({TK_STRING});
+                        irnode_t* node = create_node("ascii", token.value.size());
+                        node->expressions.push_back(pos);
+                        location_counter += node->size;
                     }else if(token.value == "macro"){
-                        
+                        error_invalid();
                     }else if(token.value == "endm"){
-                        
+                        error_unexpected("PREVIOUS MACRO DEFINITION");
                     }else{
-                        error_unrecognized_directive();
+                        error_unrecognized_directive(token);
                     }
                 break;
                 case TK_IDENTIFIER:
                     if(is_instruction(token.value)){
+                        irnode_t* node = create_node(token.value, 0);
                         
+                        advance();
+                        switch(token.type){
+                            case TK_IDENTIFIER:
+                            case TK_NUMBER:
+                            case TK_PLUS:
+                            case TK_MINUS:
+                            case TK_LPARENTHESIS:
+                                node->addressing = ADDR_DIRECT;
+                                node->size = 3;
+                                expect({TK_IDENTIFIER, TK_NUMBER, TK_PLUS, TK_MINUS, TK_LPARENTHESIS});
+                                node->expressions.push_back(pos);
+                                skip_expression();
+                            break;
+                            case TK_HASH:
+                                node->addressing = ADDR_IMMEDIATE;
+                                node->size = 2;
+                                advance();
+                                expect({TK_IDENTIFIER, TK_NUMBER, TK_PLUS, TK_MINUS, TK_LPARENTHESIS});
+                                node->expressions.push_back(pos);
+                                skip_expression();
+                            break;
+                            case TK_LBRACKET:
+                                node->addressing = ADDR_INDIRECT;
+                                node->size = 3;
+                                advance();
+                                expect({TK_IDENTIFIER, TK_NUMBER, TK_PLUS, TK_MINUS, TK_LPARENTHESIS});
+                                node->expressions.push_back(pos);
+                                skip_expression();
+                                expect({TK_RBRACKET});
+                            break;
+                            case TK_ENDLINE:
+                            case TK_END:
+                                node->addressing = ADDR_NOOP;
+                                node->size = 1;
+                            break;
+                            default:
+                                error_unexpected(token.value);
+                            break;
+                        }
                     }else if(is_macro(token.value)){
-                        
+                        error_invalid();
                     }else{
                         error_invalid();
                     }
@@ -892,7 +992,7 @@ public:
                     if(labels.find(token.value) == labels.end()){
                         labels[token.value] = location_counter;
                     }else{
-                        error_redefined_label(token.value);
+                        error_redefined_label(token);
                     }
                 }
                 break;
@@ -903,7 +1003,26 @@ public:
             advance();
         }
 
-        return nodes;
+        std::vector<uint8_t> machine_code;
+
+        // Calculate all expressions
+        for(size_t i = 0; i < nodes.size(); i++){
+            irnode_t* node = nodes[i];
+            
+            if(node->identifier == "ascii"){ // Write the string completely
+                std::string str = tokens[node->expressions[0]].value; // Get the string
+                for(size_t j = 0; str[j] != '\0'; j++){
+                    machine_code.push_back(str[j]);
+                }
+                machine_code.push_back('\0'); // End string with '\0'
+            }else if(is_instruction(node->identifier)){ // The node represents an instruction
+                if(get_opcode(node->identifier, node->addressing)){
+                    
+                }
+            }
+        }
+
+        return machine_code;
     };
 };
 
