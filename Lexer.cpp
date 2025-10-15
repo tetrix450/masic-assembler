@@ -7,6 +7,7 @@ Lexer::Lexer(std::string source_filename){
     std::ifstream source_file(source_filename);
     if(!source_file.is_open()){
         std::cerr << "Cannot open source file: " << source_filename << std::endl;
+        exit(1);
     }
 
     // Load all the source code into src and remove comments

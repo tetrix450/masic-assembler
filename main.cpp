@@ -32,9 +32,15 @@ int main(int argc, char* argv[]){
     
     // Parse
     Parser parser(tokens);
-    std::vector<irnode_t*> nodes = parser.parse();
+    std::vector<uint8_t> bytes = parser.parse();
 
     // Assemble
+    for(size_t i = 0; i < bytes.size(); i++){
+        char byte = bytes[i];
+        output_file.write(&byte, 1);
+    }
+
+    std::cout << "[Success] " << source_filename << " assembled into " << output_filename << std::endl;
 
     // Close files
     output_file.close();

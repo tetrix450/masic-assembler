@@ -28,7 +28,7 @@ enum ttype_t{ // Token type
 };
 
 enum addr_t{ // Addressing type
-    ADDR_DIRECT, ADDR_IMMEDIATE, ADDR_INDIRECT, ADDR_NOOP, ADDR_INVALID
+    ADDR_DIRECT, ADDR_IMMEDIATE, ADDR_INDIRECT, ADDR_NOOP, ADDR_INVALID, ADDR_IMMEDIATE_16
 };
 
 struct token_t{ // Token

@@ -1,50 +1,24 @@
-.equ ejemplo +1000 -400*2 +(2*3 -5)
-.org 0x0000; vectores de interrupción, comenzando por el vector de reset
+reset: .d16 inicio
 
-reset:
-.d16 inicio
+.org 0x0100
 
-puntero1: .d16 0
-datos: .d8 45, 50, 12, inicio + 0x9BC1*2(3-2), 10
-buffer8: .r8 40
-buffer16: .r16 10
+variable: .d8 255
 
-cadena: .ascii "Hola EMASIC"
-.equ doscientoscincuentaycinco 0xFF+inc_puntero;
-.equ direccion1000 1000
+.macro SUMAR addr1, addr2
+    load %addr1
+    add %addr2
+    store %addr1
+.endm
 
-.org 0x0100; código del programa (ROM)
-
-inc_puntero:
-    push
-
-    load puntero
-    inc
-    store puntero
-
-    load puntero+1
-    inc
-    store puntero+1
-
-    pop
-ret
+.macro TEST
+    load 0
+.endm
 
 inicio:
-load #0
-    bucle:
-        store [puntero]
-        call inc_puntero
-        inc
-    cmp #doscientoscincuentaycinco
-    jnz bucle
 
-store #-20 + 30 -4
-load #-20
-load puntero + (8 * 2 - 4) + 1
+    load #0
+    out 0
+    SUMAR variable, 50
+    TEST
 
-.org 0x2000; zona de variables (RAM)
-puntero:
-.d16 0x0000
-
-ejemplo:
-.d8 0x01, 0x02, 0x03, 4, 5, 6, 7, 0b00001000
+jmp inicio
