@@ -2,6 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <cctype>
+#include "DataStructures.hpp"
 #include "Lexer.cpp"
 #include "Parser.cpp"
 

@@ -8,17 +8,19 @@ private:
     std::vector<token_t> tokens; // Tokens to parse
     token_t token; // Actual token being parsed
     size_t pos = 0; // Position in the token list currently being parsed
-
+    
     std::vector<irnode_t*> nodes; // Parsed nodes
+    irnode_t* createNode(token_t t, size_t size);
 
     uint16_t location_counter = 0; // Necessary for label calculation
     uint32_t expanded_macros = 0; // Number of expanded macros (necessary to make labels unique after expansion)
     
+    // Tables
     std::map<std::string, size_t> equ_table; // equ -> start of expression in token list
     std::map<std::string, uint16_t> label_table; // Label -> location
     std::map<std::string, macro_t> macros;
-
-    irnode_t* createNode(token_t t, size_t size);
+    
+    // Process tokens
     bool advance();
     void expect(std::vector<ttype_t> types);
     void error(token_t t, std::string message);

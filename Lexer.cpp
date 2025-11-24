@@ -41,7 +41,7 @@ token_t Lexer::readIdentifierOrLabel(){
     size_t start_col = col;
 
     // Move cursor until end of alfanumeric word
-    while(pos < src.size() && (isalnum(src[pos]) || src[pos] == '_')){
+    while(pos < src.size() && (isalnum(src[pos]) || src[pos] == '_' || src[pos] == '.')){
         advance();
     }
 

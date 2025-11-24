@@ -538,10 +538,13 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
 
                             // Check if it is a valid parameter
                             bool found = false;
-                            for(size_t i = 0; i < macro.parameters.size(); i++){
+                            for(size_t i = 0; i < macro.parameters.size() && !found; i++){
                                 if(token.value == macro.parameters[i]){
                                     found = true;
-                                    break;
+                                }else if(token.value == macro.parameters[i] + ".low"){
+                                    found = true;
+                                }else if(token.value == macro.parameters[i] + ".high"){
+                                    found = true;
                                 }
                             }
 
@@ -611,7 +614,7 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     std::map<std::string, token_t> arguments;
                     for(size_t i = 0; i < macro.parameters.size(); i++){
                         advance();
-                        expect({TK_IDENTIFIER, TK_NUMBER});
+                        expect({TK_IDENTIFIER, TK_NUMBER, TK_STRING});
                         
                         arguments[macro.parameters[i]] = token;
 
@@ -647,23 +650,30 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                         }else if(t.type == TK_PERCENT){ // Parameter
                             t = macro.body[++i]; // Take next token
 
-                            if(t.type == TK_IDENTIFIER || t.type == TK_NUMBER){
+                            if(t.type == TK_IDENTIFIER || t.type == TK_NUMBER || t.type == TK_STRING){
                                 
                                 // Check if parameter is valid and replace
                                 bool found = false;
-                                for(size_t j = 0; j < macro.parameters.size(); j++){
+                                for(size_t j = 0; j < macro.parameters.size() && !found; j++){
                                     if(t.value == macro.parameters[j]){
                                         t = arguments[macro.parameters[j]];
                                         found = true;
-                                        break;
+                                    }else if(t.value == macro.parameters[j] + ".low"){
+                                        t = arguments[macro.parameters[j]];
+                                        t.value += ".low";
+                                        found = true;
+                                    }else if(t.value == macro.parameters[j] + ".high"){
+                                        t = arguments[macro.parameters[j]];
+                                        t.value += ".high";
+                                        found = true;
                                     }
                                 }
 
                                 if(!found){
-                                    error(token, "Unknown parameter after % \"" + t.value + "\"");
+                                    error(token, "Unknown parameter \"%" + t.value + "\"");
                                 }
                             }else{
-                                error(token, "Wrong parameter in macro after %: expected IDENTIFIER or NUMBER");
+                                error(token, "Wrong parameter in macro after %: expected IDENTIFIER, NUMBER or STRING");
                             }
                         }
 
@@ -688,6 +698,8 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
             case TK_LABEL:{
                 if(label_table.find(token.value) == label_table.end()){
                     label_table[token.value] = location_counter;
+                    equ_table[token.value + ".low"] = location_counter&0xFF;
+                    equ_table[token.value + ".high"] = (location_counter>>8)&0xFF;
                 }else{
                     error(token, "Redefined label " + token.value);
                 }

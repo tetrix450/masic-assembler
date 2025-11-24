@@ -17,6 +17,11 @@ bool contains(std::vector<T> v, T element){
     return false;
 }
 
+inline bool ends_with(std::string const & value, std::string const & ending){
+    if (ending.size() > value.size()) return false;
+    return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
+}
+
 // ########################################################
 // ################ Datatypes & structs ###################
 // ########################################################
