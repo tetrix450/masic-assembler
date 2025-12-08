@@ -289,14 +289,24 @@ int Parser::parseFactor(bool permit_labels){
 int Parser::parseTerm(bool permit_labels){
     int value = parseFactor(permit_labels);
 
-    while(token.type == TK_MULTIPLY || token.type == TK_DIVIDE){
+    while(token.type == TK_MULTIPLY || token.type == TK_DIVIDE ||
+    token.type == TK_SHR || token.type == TK_SHL ||
+    token.type == TK_BAR || token.type == TK_AMPERSAND ||
+    token.type == TK_CIRCUMFLEX){
+
         int op = token.type;
         advance();
         int rhs = parseFactor(permit_labels);
 
-        if(op == TK_MULTIPLY) value *= rhs;
-        else if(op == TK_DIVIDE) value /= rhs;
+        if      (op == TK_MULTIPLY) value *= rhs;
+        else if (op == TK_DIVIDE) value /= rhs;
+        else if (op == TK_SHL) value <<= rhs;
+        else if (op == TK_SHR) value >>= rhs;
+        else if (op == TK_AMPERSAND) value &= rhs;
+        else if (op == TK_BAR) value |= rhs;
+        else if (op == TK_CIRCUMFLEX) value ^= rhs;
     }
+
     return value;
 }
 
@@ -328,6 +338,11 @@ void Parser::skipExpression(){
             case TK_LPARENTHESIS:
             case TK_RPARENTHESIS:
             case TK_IDENTIFIER:
+            case TK_BAR:
+            case TK_AMPERSAND:
+            case TK_CIRCUMFLEX:
+            case TK_SHL:
+            case TK_SHR:
                 advance();
             break;
             default:

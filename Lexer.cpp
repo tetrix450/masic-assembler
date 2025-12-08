@@ -212,11 +212,38 @@ std::vector<token_t> Lexer::tokenize(){
         }else if(c == '/'){
             tokens.push_back({TK_DIVIDE, "/", line, col});
             advance();
+        }else if(c == '<'){
+            advance();
+            if(c == '<'){
+                tokens.push_back({TK_SHL, "<<", line, col});
+                advance();
+            }else{
+                std::cerr << "(" << line << ", " << col << ") [Lexical error] Expected two consecutive '<<' instead of just one '<'" << std::endl;
+                exit(1);
+            }
+        }else if(c == '>'){
+            advance();
+            if(c == '>'){
+                tokens.push_back({TK_SHR, ">>", line, col});
+                advance();
+            }else{
+                std::cerr << "(" << line << ", " << col << ") [Lexical error] Expected two consecutive '>>' instead of just one '>'" << std::endl;
+                exit(1);
+            }
         }else if(c == ','){
             tokens.push_back({TK_COMMA, ",", line, col});
             advance();
         }else if(c == '%'){
             tokens.push_back({TK_PERCENT, "%", line, col});
+            advance();
+        }else if(c == '&'){
+            tokens.push_back({TK_AMPERSAND, "&", line, col});
+            advance();
+        }else if(c == '|'){
+            tokens.push_back({TK_BAR, "|", line, col});
+            advance();
+        }else if(c == '^'){
+            tokens.push_back({TK_CIRCUMFLEX, "^", line, col});
             advance();
         }else{
             std::cerr << "(" << line << ", " << col << ") [Lexical error] Unexpected character: " << c << std::endl;
