@@ -562,8 +562,12 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     error(token, "Invalid directive " + token.value);
                 }
             break;
-            case TK_IDENTIFIER:
-                if(isMnemonic(token.value)){
+            case TK_IDENTIFIER:{
+                // Store mnemonic and make it uppercase
+                std::string mnemonic = token.value;
+                std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](unsigned char c){ return std::toupper(c); });
+
+                if(isMnemonic(mnemonic)){
                     irnode_t* node = createNode(token, 0);
                     
                     advance();
@@ -580,8 +584,13 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                             skipExpression();
                         break;
                         case TK_HASH:
-                            node->addressing = ADDR_IMMEDIATE;
-                            node->size = 2;
+                            if(mnemonic == "STSP"){
+                                node->addressing = ADDR_IMMEDIATE_16;
+                                node->size = 3;
+                            }else{
+                                node->addressing = ADDR_IMMEDIATE;
+                                node->size = 2;
+                            }
                             advance();
                             expect({TK_IDENTIFIER, TK_NUMBER, TK_PLUS, TK_MINUS, TK_LPARENTHESIS});
                             node->expressions.push_back(pos);
@@ -691,6 +700,7 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     error(token, "Unrecognized identifier " + token.value);
                 }
             break;
+            }
             case TK_ENDLINE:
             case TK_END:
                 // Do nothing
