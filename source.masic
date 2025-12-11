@@ -1,24 +1,8 @@
-reset: .d16 inicio
-
-.org 0x0100
-
-variable: .d8 255
-
-.macro SUMAR addr1, addr2
-    load %addr1
-    add %addr2
-    store %addr1
-.endm
-
-.macro TEST
-    load 0
-.endm
-
-inicio:
+.include "base.masic"
 
     load #0
     out 0
     SUMAR variable, 50
     TEST
 
-jmp inicio
+jmp reset

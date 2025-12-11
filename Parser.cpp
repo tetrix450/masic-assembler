@@ -1,4 +1,5 @@
 #include "Parser.hpp"
+#include "Lexer.hpp"
 #include "DataStructures.hpp"
 #include <string>
 #include <vector>
@@ -573,6 +574,22 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     }
 
                     macros[macro_identifier] = macro;
+                }else if(token.value == "include"){
+                    // Read the filename
+                    advance();
+                    expect({TK_STRING});
+                    std::string filename = token.value;
+                    advance();
+
+                    // Read file and tokenize
+                    Lexer lex(filename);
+                    std::vector<token_t> readtoks = lex.tokenize();
+
+                    // Insert all tokens
+                    for(int i = readtoks.size() - 1; i >= 0; i--){
+                        token_t t = readtoks[i - 1];
+                        tokens.insert(tokens.begin() + pos, t);
+                    }
                 }else{
                     error(token, "Invalid directive " + token.value);
                 }
