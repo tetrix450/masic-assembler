@@ -1,8 +1,15 @@
-.include "base.masic"
+reset: .d16 inicio
 
-    load #0
+.org 0x0100
+
+variable: .d8 255
+
+.macro SUMAR a, b
+    load #%a
+    add #%b
+.endm
+
+inicio:
+    load #'0'
     out 0
-    SUMAR variable, 50
-    TEST
-
-jmp reset
+jmp inicio

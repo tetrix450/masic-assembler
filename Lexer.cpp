@@ -1,6 +1,7 @@
 #include "Lexer.hpp"
 #include <iostream>
 #include <fstream>
+#include <string>
 
 Lexer::Lexer(std::string source_filename){
     // Load source file
@@ -214,6 +215,7 @@ std::vector<token_t> Lexer::tokenize(){
             advance();
         }else if(c == '<'){
             advance();
+            c = src[pos];
             if(c == '<'){
                 tokens.push_back({TK_SHL, "<<", line, col});
                 advance();
@@ -223,6 +225,7 @@ std::vector<token_t> Lexer::tokenize(){
             }
         }else if(c == '>'){
             advance();
+            c = src[pos];
             if(c == '>'){
                 tokens.push_back({TK_SHR, ">>", line, col});
                 advance();
@@ -244,6 +247,17 @@ std::vector<token_t> Lexer::tokenize(){
             advance();
         }else if(c == '^'){
             tokens.push_back({TK_CIRCUMFLEX, "^", line, col});
+            advance();
+        }else if(c == '\''){
+            advance();
+            c = src[pos];
+            tokens.push_back({TK_NUMBER, std::to_string((uint8_t)c), line, col});
+            advance();
+            c = src[pos];
+            if(c != '\''){
+                std::cerr << "(" << line << ", " << col << ") [Lexical error] Expected an ASCII character" << std::endl;
+                exit(1);
+            }
             advance();
         }else{
             std::cerr << "(" << line << ", " << col << ") [Lexical error] Unexpected character: " << c << std::endl;

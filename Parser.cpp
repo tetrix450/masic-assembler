@@ -586,9 +586,8 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     std::vector<token_t> readtoks = lex.tokenize();
 
                     // Insert all tokens
-                    for(int i = readtoks.size() - 1; i >= 0; i--){
-                        token_t t = readtoks[i - 1];
-                        tokens.insert(tokens.begin() + pos, t);
+                    for (int i = readtoks.size() - 1; i >= 0; --i) {
+                        tokens.insert(tokens.begin() + pos + 1, readtoks[i]);
                     }
                 }else{
                     error(token, "Invalid directive " + token.value);
