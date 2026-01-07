@@ -654,11 +654,16 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     std::map<std::string, token_t> arguments;
                     for(size_t i = 0; i < macro.parameters.size(); i++){
                         advance();
-                        expect({TK_IDENTIFIER, TK_NUMBER, TK_STRING});
-                        
-                        arguments[macro.parameters[i]] = token;
+                        expect({TK_IDENTIFIER, TK_NUMBER});
 
-                        advance();
+                        uint16_t number = parseExpression(true);
+
+                        token_t t = token;
+                        t.type = TK_NUMBER;
+                        t.value = std::to_string(number);
+                        
+                        arguments[macro.parameters[i]] = t;
+
                         if(i < macro.parameters.size() - 1){
                             expect({TK_COMMA});
                         }

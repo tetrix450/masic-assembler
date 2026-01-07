@@ -5,11 +5,13 @@ reset: .d16 inicio
 variable: .d8 255
 
 .macro SUMAR a, b
-    load #%a
+    load #%a+1
     add #%b
 .endm
 
+
 inicio:
     load #'0'
+    SUMAR 100,59
     out 0
 jmp inicio
