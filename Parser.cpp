@@ -526,27 +526,21 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     while(!(token.type == TK_DIRECTIVE && token.value == "endm")){
                         if(token.type == TK_LABEL){
                             
-                            // Check if global label exists
-                            if(label_table.find(token.value) == label_table.end()){
-                                
-                                // Check if local labels and paramater names collide
-                                for(size_t i = 0; i < macro.parameters.size(); i++){
-                                    if(token.value == macro.parameters[i]){
-                                        error(token, "Label cannot be named the same as a parameter in macro " + macro_identifier);
-                                    }
+                            // Check if local labels and paramater names collide
+                            for(size_t i = 0; i < macro.parameters.size(); i++){
+                                if(token.value == macro.parameters[i]){
+                                    error(token, "Label cannot be named the same as a parameter in macro " + macro_identifier);
                                 }
-
-                                // Check if local label exists
-                                for(size_t i = 0; i < macro.labels.size(); i++){
-                                    if(token.value == macro.labels[i]){
-                                        error(token, "Redefined local label " + token.value + " at macro " + macro_identifier);
-                                    }
-                                }
-
-                                macro.labels.push_back(token.value);
-                            }else{
-                                error(token, "Redefined global label " + token.value + " at macro " + macro_identifier);
                             }
+
+                            // Check if local label exists
+                            for(size_t i = 0; i < macro.labels.size(); i++){
+                                if(token.value == macro.labels[i]){
+                                    error(token, "Redefined local label " + token.value + " at macro " + macro_identifier);
+                                }
+                            }
+
+                            macro.labels.push_back(token.value);
                         }else if(token.type == TK_PERCENT){
                             macro.body.push_back(token);
                             advance();
@@ -685,7 +679,7 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
 
                         }else if(t.type == TK_IDENTIFIER){
 
-                            // Rename if it is a label
+                            // Rename if it is a local label
                             for(size_t j = 0; j < macro.labels.size(); j++){
                                 if(macro.labels[j] == t.value){
                                     t.value = "__" + t.value + "__" + std::to_string(expanded_macros);
