@@ -210,10 +210,10 @@ bool Parser::advance(){
 }
 
 // Expect actual token to be one of the given
-void Parser::expect(std::vector<ttype_t> types){
+bool Parser::expect(std::vector<ttype_t> types){
     if(types.size() == 1){ // Single type expected
         if(token.type == types[0]){
-            return;
+            return true;
         }
         error(token, "Unexpected " + ttypeToString[token.type] + "(" + token.value + ") expected " + ttypeToString[types[0]]);
     }else{ // Multiple types expected
@@ -221,7 +221,7 @@ void Parser::expect(std::vector<ttype_t> types){
         for(size_t i = 0; i < types.size(); i++){
             // Return if token is expected
             if(token.type == types[i]){
-                return;
+                return true;
             }
             
             // Construct string of expected identifiers
@@ -236,7 +236,9 @@ void Parser::expect(std::vector<ttype_t> types){
         
         // Throw an error showing what the parser expected
         error(token, "Unexpected " + ttypeToString[token.type] + "(" + token.value + ") expected " + exp);
+        return false;
     }
+    return false;
 }
 
 // ###############################################
@@ -500,15 +502,16 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     expect({TK_STRING});
                     irnode_t* node = createNode(token, token.value.size() + 1);
                     location_counter += node->size;
+
                 }else if(token.value == "macro"){
                     macro_t macro;
-                    
+
                     // Pick up macro identifier
                     advance();
                     expect({TK_IDENTIFIER});
                     std::string macro_identifier = token.value;
 
-                    // Pick up arguments
+                    // Pick up parameters
                     advance();
                     while(token.type != TK_ENDLINE){
                         expect({TK_IDENTIFIER});
@@ -542,6 +545,7 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
 
                             macro.labels.push_back(token.value);
                         }else if(token.type == TK_PERCENT){
+                            
                             macro.body.push_back(token);
                             advance();
                             expect({TK_IDENTIFIER});
@@ -550,10 +554,6 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                             bool found = false;
                             for(size_t i = 0; i < macro.parameters.size() && !found; i++){
                                 if(token.value == macro.parameters[i]){
-                                    found = true;
-                                }else if(token.value == macro.parameters[i] + ".low"){
-                                    found = true;
-                                }else if(token.value == macro.parameters[i] + ".high"){
                                     found = true;
                                 }
                             }
@@ -641,25 +641,31 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     }
 
                     location_counter += node->size;
-                }else if(macros.find(token.value) != macros.end()){ // Macro expansion
+                }else if(macros.find(token.value) != macros.end()){ // Expansión de macros
+                
                     macro_t macro = macros[token.value];
-
-                    // -------------- Pick up arguments -----------------
-                    std::map<std::string, token_t> arguments;
+                    
+                    // -------------- Recoger argumentos -----------------
+                    std::map<std::string, std::vector<token_t>> argument_tokens;
+                    advance();
                     for(size_t i = 0; i < macro.parameters.size(); i++){
-                        advance();
-                        expect({TK_IDENTIFIER, TK_NUMBER});
-
-                        uint16_t number = parseExpression(true);
-
-                        token_t t = token;
-                        t.type = TK_NUMBER;
-                        t.value = std::to_string(number);
                         
-                        arguments[macro.parameters[i]] = t;
+                        std::string parameter_name = macro.parameters[i];
+
+                        while(token.type != TK_COMMA && token.type != TK_ENDLINE && token.type != TK_END){
+                            argument_tokens[parameter_name].push_back(token);
+                            advance();
+                        }
+
+                        if(argument_tokens[parameter_name].empty()){
+                            error(token,"Empty argument in macro");
+                        }
 
                         if(i < macro.parameters.size() - 1){
                             expect({TK_COMMA});
+                            advance();
+                        }else{
+                            expect({TK_ENDLINE, TK_END});
                         }
                     }
 
@@ -668,59 +674,70 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     }
 
                     expect({TK_ENDLINE, TK_END});
-                    
+
                     // ------------- Insert body tokens -----------------
                     std::vector<token_t> expanded_tokens;
+
                     for(size_t i = 0; i < macro.body.size(); i++){
                         token_t t = macro.body[i];
 
-                        if(t.type == TK_LABEL){ // Rename label
+                        if(t.type == TK_LABEL){ // Renombrar etiqueta local
                             t.value = "__" + t.value + "__" + std::to_string(expanded_macros);
+                            expanded_tokens.push_back(t);
 
                         }else if(t.type == TK_IDENTIFIER){
 
-                            // Rename if it is a local label
+                            // Renombrar referencias a etiquetas locales
                             for(size_t j = 0; j < macro.labels.size(); j++){
                                 if(macro.labels[j] == t.value){
                                     t.value = "__" + t.value + "__" + std::to_string(expanded_macros);
                                     break;
                                 }
                             }
-                        }else if(t.type == TK_PERCENT){ // Parameter
-                            t = macro.body[++i]; // Take next token
 
-                            if(t.type == TK_IDENTIFIER || t.type == TK_NUMBER || t.type == TK_STRING){
-                                
-                                // Check if parameter is valid and replace
-                                bool found = false;
-                                for(size_t j = 0; j < macro.parameters.size() && !found; j++){
-                                    if(t.value == macro.parameters[j]){
-                                        t = arguments[macro.parameters[j]];
-                                        found = true;
-                                    }else if(t.value == macro.parameters[j] + ".low"){
-                                        t = arguments[macro.parameters[j]];
-                                        t.value += ".low";
-                                        found = true;
-                                    }else if(t.value == macro.parameters[j] + ".high"){
-                                        t = arguments[macro.parameters[j]];
-                                        t.value += ".high";
-                                        found = true;
-                                    }
-                                }
+                            expanded_tokens.push_back(t);
 
-                                if(!found){
-                                    error(token, "Unknown parameter \"%" + t.value + "\"");
-                                }
-                            }else{
-                                error(token, "Wrong parameter in macro after %: expected IDENTIFIER, NUMBER or STRING");
+                        }else if(t.type == TK_PERCENT){
+                            i++;
+                            
+                            if(i >= macro.body.size()){
+                                error(t, "Expected parameter after %");
                             }
-                        }
 
-                        expanded_tokens.insert(expanded_tokens.begin(), t);
+                            token_t param = macro.body[i];
+
+                            if(param.type != TK_IDENTIFIER){
+                                error(param, "Expected identifier after %");
+                            }
+
+                            bool found = false;
+
+                            for(size_t j = 0; j < macro.parameters.size(); j++){
+
+                                if(param.value == macro.parameters[j]){
+
+                                    std::string parameter_name = macro.parameters[j];
+
+                                    for(size_t k = 0; k < argument_tokens[parameter_name].size(); k++){
+                                        expanded_tokens.push_back(argument_tokens[parameter_name][k]);
+                                    }
+
+                                    found = true;
+                                    break;
+                                }
+                            }
+
+                            if(!found){
+                                error(param, "Unknown parameter \"%" + param.value + "\"");
+                            }
+
+                        }else{
+                            expanded_tokens.push_back(t);
+                        }
                     }
 
                     // Insert macro tokens into program
-                    for(size_t i = 0; i < expanded_tokens.size(); i++){
+                    for(int i = expanded_tokens.size() - 1; i >= 0; i--){
                         tokens.insert(tokens.begin() + pos, expanded_tokens[i]);
                     }
 
@@ -738,8 +755,6 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
             case TK_LABEL:{
                 if(label_table.find(token.value) == label_table.end()){
                     label_table[token.value] = location_counter;
-                    equ_table[token.value + ".low"] = location_counter&0xFF;
-                    equ_table[token.value + ".high"] = (location_counter>>8)&0xFF;
                 }else{
                     error(token, "Redefined label " + token.value);
                 }

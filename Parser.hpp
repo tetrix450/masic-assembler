@@ -22,7 +22,7 @@ private:
     
     // Process tokens
     bool advance();
-    void expect(std::vector<ttype_t> types);
+    bool expect(std::vector<ttype_t> types);
     void error(token_t t, std::string message);
     bool isMnemonic(std::string value);
     uint8_t getOpcode(token_t t, addr_t addressing);
