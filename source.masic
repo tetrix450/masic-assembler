@@ -55,12 +55,12 @@
 ;---------------------------------------------------
 .macro SWAP addr1, addr2
     load %addr1
-    store swap_temp
+    push
 
     load %addr2
     store %addr1
 
-    load swap_temp
+    pop
     store %addr2
 .endm
 
@@ -79,19 +79,29 @@
 .endm
 
 ;---------------------------------------------------
-; DIBUJAR LÍNEA
-; x1, y1: punto inicial
-; x2, y2: punto final
+; CALCULAR VALOR ABSOLUTO DEL ACUMULADOR
 ;---------------------------------------------------
-.macro DRAW_LINE x1, y1, x2, y2
+.macro ABS
+    jns end
+    not
+    add #1
+end:
+.endm
+
+;---------------------------------------------------
+; DIBUJAR LÍNEA
+; x0, y0: punto inicial
+; x1, y1: punto final
+;---------------------------------------------------
+.macro DRAW_LINE x0, y0, x1, y1
+    load #%x0
+    store draw_line_x0
+    load #%y0
+    store draw_line_y0
     load #%x1
     store draw_line_x1
     load #%y1
     store draw_line_y1
-    load #%x2
-    store draw_line_x2
-    load #%y2
-    store draw_line_y2
     call draw_line
 .endm
 
@@ -178,12 +188,303 @@ ret
 ; Dibuja una línea en octantes horizontales
 ;---------------------------------------------------
 draw_line_h:
-    call draw_line
+    ;-------------------
+    ; if(x0 > x1)
+    ;   swap(x0,x1)
+    ;   swap(y0,y1)
+    ;-------------------
+    load draw_line_x0
+    cmp draw_line_x1
+    jnc draw_line_h_dxdy
+
+    SWAP draw_line_x0, draw_line_x1
+    SWAP draw_line_y0, draw_line_y1
+
+draw_line_h_dxdy:
+
+    ;-------------------
+    ; dx = x1 - x0
+    ;-------------------
+    load draw_line_x1
+    sub draw_line_x0
+    store draw_line_dx
+
+    ;-------------------
+    ; dy = y1 - y0
+    ;-------------------
+    load draw_line_y1
+    sub draw_line_y0
+    store draw_line_dy
+
+    ;-------------------
+    ; if(dy < 0)
+    ;   dir = -1
+    ;   dir *= -1
+    ; else
+    ;   dir = 1
+    ;-------------------
+    cmp #0
+    js draw_line_h_dir_neg
+
+draw_line_h_dir_pos:
+
+    load #1
+    store draw_line_dir
+    jmp draw_line_h_dir_end
+    
+draw_line_h_dir_neg:
+
+    load #-1
+    store draw_line_dir
+
+    load draw_line_dy
+    not
+    add #1
+    store draw_line_dy
+
+draw_line_h_dir_end:
+
+    ;-------------------
+    ; D = 2*dy - dx
+    ;-------------------
+    load draw_line_dy
+    shl
+    sub draw_line_dx
+    store draw_line_D
+
+    ;-------------------
+    ; y = y0
+    ;-------------------
+    load draw_line_y0
+    store draw_line_y
+
+    ;-------------------
+    ; x = x0
+    ;-------------------
+    load draw_line_x0
+    store draw_line_x
+
+draw_line_h_loop:
+    
+    PLOT draw_line_x, draw_line_y
+
+    ;-------------------
+    ; if (D > 0)
+    ;-------------------
+
+    load draw_line_D
+    cmp #0
+    jns draw_line_h_D_pos
+
+draw_line_h_D_neg:
+
+    ;-------------------
+    ; D = D + 2*dy
+    ;-------------------
+    load draw_line_dy
+    shl
+    add draw_line_D
+    store draw_line_D
+
+    jmp draw_line_h_D_end
+
+draw_line_h_D_pos:
+
+    ;-------------------
+    ; y = y + dir
+    ;-------------------
+    load draw_line_y
+    add draw_line_dir
+    store draw_line_y
+
+    ;-------------------
+    ; D = D + (2*(dy - dx))
+    ;-------------------
+    load draw_line_dy
+    sub draw_line_dx
+    shl
+    add draw_line_D
+    store draw_line_D
+
+draw_line_h_D_end:
+                
+    ;-------------------
+    ; x++
+    ;-------------------
+    load draw_line_x
+    add #1
+    store draw_line_x
+
+    ;-------------------
+    ; if (x < x1) loop 
+    ;------------------
+    load draw_line_x
+    cmp draw_line_x1
+    jnc draw_line_h_loop
+
+ret
+
+;---------------------------------------------------
+; RUTINA draw_line_v
+; Dibuja una línea en octantes verticales
+;---------------------------------------------------
+draw_line_v:
+    ;-------------------
+    ; if(y0 > y1)
+    ;   swap(x0,x1)
+    ;   swap(y0,y1)
+    ;-------------------
+    load draw_line_y0
+    cmp draw_line_y1
+    jnc draw_line_v_dxdy
+
+    SWAP draw_line_x0, draw_line_x1
+    SWAP draw_line_y0, draw_line_y1
+
+draw_line_v_dxdy:
+
+    ;-------------------
+    ; dy = y1 - y0
+    ;-------------------
+    load draw_line_y1
+    sub draw_line_y0
+    store draw_line_dy
+
+    ;-------------------
+    ; dx = x1 - x0
+    ;-------------------
+    load draw_line_x1
+    sub draw_line_x0
+    store draw_line_dx
+
+    ;-------------------
+    ; if(dx < 0)
+    ;   dir = -1
+    ;   dir *= -1
+    ; else
+    ;   dir = 1
+    ;-------------------
+    cmp #0
+    js draw_line_v_dir_neg
+
+draw_line_v_dir_pos:
+
+    load #1
+    store draw_line_dir
+    jmp draw_line_v_dir_end
+    
+draw_line_v_dir_neg:
+
+    load #-1
+    store draw_line_dir
+
+    load draw_line_dx
+    not
+    add #1
+    store draw_line_dx
+
+draw_line_v_dir_end:
+
+    ;-------------------
+    ; D = 2*dx - dy
+    ;-------------------
+    load draw_line_dx
+    shl
+    sub draw_line_dy
+    store draw_line_D
+
+    ;-------------------
+    ; y = y0
+    ;-------------------
+    load draw_line_y0
+    store draw_line_y
+
+    ;-------------------
+    ; x = x0
+    ;-------------------
+    load draw_line_x0
+    store draw_line_x
+
+draw_line_v_loop:
+    
+    PLOT draw_line_x, draw_line_y
+
+    ;-------------------
+    ; if (D > 0)
+    ;-------------------
+
+    load draw_line_D
+    cmp #0
+    jns draw_line_v_D_pos
+
+draw_line_v_D_neg:
+
+    ;-------------------
+    ; D = D + 2*dx
+    ;-------------------
+    load draw_line_dx
+    shl
+    add draw_line_D
+    store draw_line_D
+
+    jmp draw_line_v_D_end
+
+draw_line_v_D_pos:
+
+    ;-------------------
+    ; x = x + dir
+    ;-------------------
+    load draw_line_x
+    add draw_line_dir
+    store draw_line_x
+
+    ;-------------------
+    ; D = D + (2*(dx - dy))
+    ;-------------------
+    load draw_line_dx
+    sub draw_line_dy
+    shl
+    add draw_line_D
+    store draw_line_D
+
+draw_line_v_D_end:
+                
+    ;-------------------
+    ; y++
+    ;-------------------
+    load draw_line_y
+    add #1
+    store draw_line_y
+
+    ;-------------------
+    ; if (y < y1) loop 
+    ;-------------------
+    load draw_line_y
+    cmp draw_line_y1
+    jnc draw_line_v_loop
+
 ret
 
 draw_line:
+
+    ;-------------------
+    ; ABS(x1 - x0)
+    ;-------------------
+    load draw_line_x1
+    sub draw_line_x0
+    ABS
+    store draw_line_abs_x
+
+    ;-------------------
+    ; ABS(y1 - y0)
+    ;-------------------
+    load draw_line_y1
+    sub draw_line_y0
+    ABS
+    store draw_line_abs_y
+
+    PLOT draw_line_x0, draw_line_y0
     PLOT draw_line_x1, draw_line_y1
-    PLOT draw_line_x2, draw_line_y2
 ret
 
 ;---------------------------------------------------
@@ -191,7 +492,7 @@ ret
 ; Dibujar en pantalla.
 ;---------------------------------------------------
 draw:
-    DRAW_LINE CENTER_X, CENTER_Y, 60, 40
+    DRAW_LINE CENTER_X, CENTER_Y, CENTER_X+10, CENTER_Y-10
 ret
 
 
@@ -236,22 +537,17 @@ clear_screen_counter:   .r16 1
 ; VARIABLES RUTINA draw_line
 ;---------------------------------------------------
 ; PARÁMETROS:
+draw_line_x0:           .r8 1
+draw_line_y0:           .r8 1
 draw_line_x1:           .r8 1
 draw_line_y1:           .r8 1
-draw_line_x2:           .r8 1
-draw_line_y2:           .r8 1
 
 ; TEMP:
 draw_line_x:            .r8 1
 draw_line_y:            .r8 1
 draw_line_dx:           .r8 1
 draw_line_dy:           .r8 1
-draw_line_err:          .r8 1
+draw_line_D:          .r8 1
 draw_line_dir:          .r8 1
 draw_line_abs_x:        .r8 1
 draw_line_abs_y:        .r8 1
-
-;---------------------------------------------------
-; TEMPORALES MACRO SWAP
-;---------------------------------------------------
-swap_temp:              .r8 1

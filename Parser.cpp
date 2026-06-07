@@ -671,10 +671,6 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                         }
                     }
 
-                    if(macro.parameters.empty()){
-                        advance();
-                    }
-
                     expect({TK_ENDLINE, TK_END});
 
                     // ------------- Insert body tokens -----------------
