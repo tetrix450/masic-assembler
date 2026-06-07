@@ -438,8 +438,10 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     if(equ_table.find(symbol_identifier) == equ_table.end()){ // Check if the symbol is not defined yet
                         advance();
                         expect({TK_NUMBER, TK_PLUS, TK_MINUS, TK_LPARENTHESIS, TK_IDENTIFIER}); // Check if it is the start of an expression
-                        equ_table[symbol_identifier] = pos;
-                        skipExpression();
+
+                        int value = parseExpression(true);
+
+                        equ_table[symbol_identifier] = value;
                     }else{
                         error(token, "Redefined " + token.value + " symbol");
                     }

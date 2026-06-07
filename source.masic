@@ -4,6 +4,12 @@
 .d16 start
 
 
+;---------------------------------------------------
+;------------------ CONSTANTES ---------------------
+;---------------------------------------------------
+.equ CENTER_X 40
+.equ CENTER_Y 30
+
 
 ;---------------------------------------------------
 ;-------------------- MACROS -----------------------
@@ -28,11 +34,65 @@
 ;---------------------------------------------------
 .macro INC16 addr
     load %addr
-    inc
+    add #1
     store %addr
     load %addr+1
     adc #0
     store %addr+1
+.endm
+
+;---------------------------------------------------
+; MOVER UN DATO DE 8 BITS DE UNA DIRECCIÓN A OTRA
+;---------------------------------------------------
+.macro MOV dest, source
+    load %source
+    store %dest
+.endm
+
+;---------------------------------------------------
+; INTERCAMBIAR CONTENIDO ENTRE DOS POSICIONES DE MEMORIA
+; addr1, addr2: direcciones de valores a intercambiar
+;---------------------------------------------------
+.macro SWAP addr1, addr2
+    load %addr1
+    store swap_temp
+
+    load %addr2
+    store %addr1
+
+    load swap_temp
+    store %addr2
+.endm
+
+;---------------------------------------------------
+; DIBUJAR UN PUNTO EN (x, y)
+; x, y: coordenadas del punto
+;---------------------------------------------------
+.macro PLOT x, y
+    load %x
+    store plot_x
+    load %y
+    store plot_y
+    load #160
+    store plot_char
+    call plot
+.endm
+
+;---------------------------------------------------
+; DIBUJAR LÍNEA
+; x1, y1: punto inicial
+; x2, y2: punto final
+;---------------------------------------------------
+.macro DRAW_LINE x1, y1, x2, y2
+    load #%x1
+    store draw_line_x1
+    load #%y1
+    store draw_line_y1
+    load #%x2
+    store draw_line_x2
+    load #%y2
+    store draw_line_y2
+    call draw_line
 .endm
 
 
@@ -85,55 +145,45 @@ ret
 ; Contiene la lógica de ejecución del programa.
 ;---------------------------------------------------
 controller:
-    ;prev_x = x
-    load x
-    store prev_x
-
-    ;prev_y = y
-    load y
-    store prev_y
-
-    ;x += hspeed
-    load x
-    add hspeed
-    store x
-
-    ;y += vspeed
-    load y
-    add vspeed
-    store y
-
-    load x
-    cmp #79
-    jz invert_x
-
-    load x
-    cmp #0
-    jz invert_x
-    jmp check_y
-
-invert_x:
-    load hspeed
-    not
-    inc
-    store hspeed
     
-    check_y:
-    load y
-    cmp #59
-    jz invert_y
+ret
 
-    load y
-    cmp #0
-    jz invert_y
-    jmp controller_end
+;---------------------------------------------------
+; RUTINA clear_screen
+; Limpia la pantalla.
+;---------------------------------------------------
+clear_screen:
+    load #0
+    store clear_screen_counter
+    store clear_screen_counter+1
+clear_screen_loop:
+    load #' '
+    out [clear_screen_counter]
+    INC16 clear_screen_counter
+    load clear_screen_counter+1
+    cmp #0x20
+    jnz clear_screen_loop
+ret
 
-invert_y:
-    load vspeed
-    not
-    inc
-    store vspeed
-controller_end:
+;---------------------------------------------------
+; RUTINA init
+; Inicializar las variables al comienzo del programa
+;---------------------------------------------------
+init:
+
+ret
+
+;---------------------------------------------------
+; RUTINA draw_line_h
+; Dibuja una línea en octantes horizontales
+;---------------------------------------------------
+draw_line_h:
+    call draw_line
+ret
+
+draw_line:
+    PLOT draw_line_x1, draw_line_y1
+    PLOT draw_line_x2, draw_line_y2
 ret
 
 ;---------------------------------------------------
@@ -141,50 +191,7 @@ ret
 ; Dibujar en pantalla.
 ;---------------------------------------------------
 draw:
-    ;dibujar pelota en la siguiente posición
-    load current_char
-    inc
-    store current_char
-    store plot_char
-    load x
-    store plot_x
-    load y
-    store plot_y
-    call plot
-
-    ;borrar la pelota de la posición previa
-    load #' '
-    store plot_char
-    load prev_x
-    store plot_x
-    load prev_y
-    store plot_y
-    call plot
-ret
-
-;---------------------------------------------------
-; RUTINA delay
-; Introduce un delay.
-;
-; PARÁMETROS
-; delay_value: valor de escalado del delay. Un valor
-; más grande introduce un retraso más largo.
-;---------------------------------------------------
-delay:
-    load #0
-    store delay_counter
-    store delay_counter+1
-delay_loop:
-
-    INC16 delay_counter
-
-    ; cmp16 delay_counter, delay_value
-    load delay_counter
-    cmp delay_value
-    jnz delay_loop
-    load delay_counter+1
-    cmp delay_value+1
-    jnz delay_loop
+    DRAW_LINE CENTER_X, CENTER_Y, 60, 40
 ret
 
 
@@ -192,29 +199,18 @@ ret
 ;---------------------------------------------------
 ;--------------------- PROGRAMA --------------------
 ;---------------------------------------------------
-start_counter: .d16 0
 start:
-    load #' '
-    out [start_counter]
-
-    INC16 start_counter
-
-    load start_counter
-    cmp #0x00
-    jnz start
-    load start_counter+1
-    cmp #0x20
-    jnz start
+    call init
+    call clear_screen
 loop:
     call controller
     call draw
-    call delay
 jmp loop
 
 
 
 ;---------------------------------------------------
-;--------------------- DATOS -----------------------
+;------------------- DATOS (RAM) -------------------
 ;---------------------------------------------------
 .org 0x2000
 
@@ -222,31 +218,40 @@ jmp loop
 ; VARIABLES PROGRAMA PRINCIPAL
 ;---------------------------------------------------
 
-; Coordenadas de la pelota
-x: .d8 3
-y: .d8 13
-
-; Coordenadas previas de la pelota
-prev_x: .d8 0
-prev_y: .d8 0
-
-; Velocidad horizontal y vertical de la pelota
-hspeed: .d8 1
-vspeed: .d8 1
-
-; Carácter que representa la pelota
-current_char: .d8 '0'
 
 ;---------------------------------------------------
-; VARIABLES RUTINA DELAY
+; VARIABLES RUTINA plot
 ;---------------------------------------------------
-delay_counter: .d16 0
-delay_value: .d16 500
+plot_x:                 .r8 1
+plot_y:                 .r8 1
+plot_char:              .r8 1
+plot_temp:              .r16 1
 
 ;---------------------------------------------------
-; VARIABLES RUTINA PLOT
+; VARIABLES RUTINA clear_screen
 ;---------------------------------------------------
-plot_x: .d8 0
-plot_y: .d8 0
-plot_char: .d8 0
-plot_temp: .d16 0
+clear_screen_counter:   .r16 1
+
+;---------------------------------------------------
+; VARIABLES RUTINA draw_line
+;---------------------------------------------------
+; PARÁMETROS:
+draw_line_x1:           .r8 1
+draw_line_y1:           .r8 1
+draw_line_x2:           .r8 1
+draw_line_y2:           .r8 1
+
+; TEMP:
+draw_line_x:            .r8 1
+draw_line_y:            .r8 1
+draw_line_dx:           .r8 1
+draw_line_dy:           .r8 1
+draw_line_err:          .r8 1
+draw_line_dir:          .r8 1
+draw_line_abs_x:        .r8 1
+draw_line_abs_y:        .r8 1
+
+;---------------------------------------------------
+; TEMPORALES MACRO SWAP
+;---------------------------------------------------
+swap_temp:              .r8 1

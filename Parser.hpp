@@ -16,7 +16,7 @@ private:
     uint32_t expanded_macros = 0; // Number of expanded macros (necessary to make labels unique after expansion)
     
     // Tables
-    std::map<std::string, size_t> equ_table; // equ -> start of expression in token list
+    std::map<std::string, uint16_t> equ_table; // equ -> final value
     std::map<std::string, uint16_t> label_table; // Label -> location
     std::map<std::string, macro_t> macros;
     
