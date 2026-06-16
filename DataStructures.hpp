@@ -41,6 +41,7 @@ struct token_t{ // Token
     ttype_t type;
     std::string value;
     size_t line, column;
+    std::string source_file;
 };
 
 struct macro_t{ // Macro

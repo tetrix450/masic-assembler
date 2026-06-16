@@ -87,7 +87,7 @@ std::vector<inst_t> instructions = {
 
 // Show an error message at the line given by the token and exit the program
 void Parser::error(token_t t, std::string message){
-    std::cerr << "(" << t.line << ", " << t.column << ") [Parsing error]: " << message << std::endl;
+    std::cerr << t.source_file << " - (" << t.line << ", " << t.column << ") [Parsing error]: " << message << std::endl;
     exit(1);
 }
 

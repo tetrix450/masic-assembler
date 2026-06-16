@@ -10,6 +10,7 @@
 
 class Lexer{
     private:
+        std::string source_filename;
         std::string src = ""; // Source code
         size_t pos = 0; // Current position in src currently being indexed
         size_t line = 1; // Current line number in source code

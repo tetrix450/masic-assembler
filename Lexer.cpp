@@ -3,7 +3,7 @@
 #include <fstream>
 #include <string>
 
-Lexer::Lexer(std::string source_filename){
+Lexer::Lexer(std::string source_filename):source_filename(source_filename){
     // Load source file
     std::ifstream source_file(source_filename);
     if(!source_file.is_open()){
@@ -52,11 +52,11 @@ token_t Lexer::readIdentifierOrLabel(){
     // It is a label
     if(pos < src.size() && src[pos] == ':'){
         advance();
-        return {TK_LABEL, value, line, start_col};
+        return {TK_LABEL, value, line, start_col, source_filename};
     }
 
     // It is an identifier
-    return {TK_IDENTIFIER, value, line, start_col};
+    return {TK_IDENTIFIER, value, line, start_col, source_filename};
 }
 token_t Lexer::readDirective(){
     size_t start = pos;
@@ -71,7 +71,7 @@ token_t Lexer::readDirective(){
     std::string value = src.substr(start, pos - start);
 
     // Return the token
-    return {TK_DIRECTIVE, value, line, start_col};
+    return {TK_DIRECTIVE, value, line, start_col, source_filename};
 }
 token_t Lexer::readString(){
     size_t start = pos;
@@ -83,7 +83,7 @@ token_t Lexer::readString(){
     }
 
     if(pos == src.size() - 1){
-        std::cerr << "(" << line << ", " << col << ") [Lexical error] Found string with no closing quotes (\")" << std::endl;
+        std::cerr << source_filename << " - (" << line << ", " << col << ") [Lexical error] Found string with no closing quotes (\")" << std::endl;
         exit(1);
     }else{
         advance();
@@ -92,7 +92,7 @@ token_t Lexer::readString(){
     // Get the directive string
     std::string value = src.substr(start, pos - start - 1);
 
-    return {TK_STRING, value, line, start_col};
+    return {TK_STRING, value, line, start_col, source_filename};
 }
 token_t Lexer::readNumber(){
     size_t start = pos;
@@ -146,14 +146,14 @@ token_t Lexer::readNumber(){
     }
 
     if(start == pos){
-        std::cerr << "(" << line << ", " << col << ") [Lexical error] Invalid number" << std::endl;
+        std::cerr << source_filename  << " - (" << line << ", " << col << ") [Lexical error] Invalid number" << std::endl;
         exit(1);
     }
 
     std::string value = src.substr(start, pos - start);
     if(negative) value = "-" + value;
 
-    return {TK_NUMBER, value, line, start_col};
+    return {TK_NUMBER, value, line, start_col, source_filename};
 }
 std::vector<token_t> Lexer::tokenize(){
     // Read character by character and tokenize all the program
@@ -175,7 +175,7 @@ std::vector<token_t> Lexer::tokenize(){
             tokens.push_back(readDirective());
         }else if(c == '\n'){
             // Endline
-            tokens.push_back({TK_ENDLINE, "\\n", line, col});
+            tokens.push_back({TK_ENDLINE, "\\n", line, col, source_filename});
             advance();
         }else if(c == '\"'){
             // String
@@ -183,89 +183,89 @@ std::vector<token_t> Lexer::tokenize(){
             tokens.push_back(readString());
         }else if(c == '#'){
             // ADDR_IMMEDIATE value
-            tokens.push_back({TK_HASH, "#", line, col});
+            tokens.push_back({TK_HASH, "#", line, col, source_filename});
             advance();
         }else if(c == '['){
             // Left bracket
-            tokens.push_back({TK_LBRACKET, "[", line, col});
+            tokens.push_back({TK_LBRACKET, "[", line, col, source_filename});
             advance();
         }else if(c == ']'){
             // Right bracket
-            tokens.push_back({TK_RBRACKET, "]", line, col});
+            tokens.push_back({TK_RBRACKET, "]", line, col, source_filename});
             advance();
         }else if(c == '('){
             // Left parentheses
-            tokens.push_back({TK_LPARENTHESIS, "(", line, col});
+            tokens.push_back({TK_LPARENTHESIS, "(", line, col, source_filename});
             advance();
         }else if(c == ')'){
             // Right parentheses
-            tokens.push_back({TK_RPARENTHESIS, ")", line, col});
+            tokens.push_back({TK_RPARENTHESIS, ")", line, col, source_filename});
             advance();
         }else if(c == '+'){
-            tokens.push_back({TK_PLUS, "+", line, col});
+            tokens.push_back({TK_PLUS, "+", line, col, source_filename});
             advance();
         }else if(c == '-'){
-            tokens.push_back({TK_MINUS, "-", line, col});
+            tokens.push_back({TK_MINUS, "-", line, col, source_filename});
             advance();
         }else if(c == '*'){
-            tokens.push_back({TK_MULTIPLY, "*", line, col});
+            tokens.push_back({TK_MULTIPLY, "*", line, col, source_filename});
             advance();
         }else if(c == '/'){
-            tokens.push_back({TK_DIVIDE, "/", line, col});
+            tokens.push_back({TK_DIVIDE, "/", line, col, source_filename});
             advance();
         }else if(c == '<'){
             advance();
             c = src[pos];
             if(c == '<'){
-                tokens.push_back({TK_SHL, "<<", line, col});
+                tokens.push_back({TK_SHL, "<<", line, col, source_filename});
                 advance();
             }else{
-                std::cerr << "(" << line << ", " << col << ") [Lexical error] Expected two consecutive '<<' instead of just one '<'" << std::endl;
+                std::cerr << source_filename  << " - (" << line << ", " << col << ") [Lexical error] Expected two consecutive '<<' instead of just one '<'" << std::endl;
                 exit(1);
             }
         }else if(c == '>'){
             advance();
             c = src[pos];
             if(c == '>'){
-                tokens.push_back({TK_SHR, ">>", line, col});
+                tokens.push_back({TK_SHR, ">>", line, col, source_filename});
                 advance();
             }else{
-                std::cerr << "(" << line << ", " << col << ") [Lexical error] Expected two consecutive '>>' instead of just one '>'" << std::endl;
+                std::cerr << source_filename  << " - (" << line << ", " << col << ") [Lexical error] Expected two consecutive '>>' instead of just one '>'" << std::endl;
                 exit(1);
             }
         }else if(c == ','){
-            tokens.push_back({TK_COMMA, ",", line, col});
+            tokens.push_back({TK_COMMA, ",", line, col, source_filename});
             advance();
         }else if(c == '%'){
-            tokens.push_back({TK_PERCENT, "%", line, col});
+            tokens.push_back({TK_PERCENT, "%", line, col, source_filename});
             advance();
         }else if(c == '&'){
-            tokens.push_back({TK_AMPERSAND, "&", line, col});
+            tokens.push_back({TK_AMPERSAND, "&", line, col, source_filename});
             advance();
         }else if(c == '|'){
-            tokens.push_back({TK_BAR, "|", line, col});
+            tokens.push_back({TK_BAR, "|", line, col, source_filename});
             advance();
         }else if(c == '^'){
-            tokens.push_back({TK_CIRCUMFLEX, "^", line, col});
+            tokens.push_back({TK_CIRCUMFLEX, "^", line, col, source_filename});
             advance();
         }else if(c == '\''){
             advance();
             c = src[pos];
-            tokens.push_back({TK_NUMBER, std::to_string((uint8_t)c), line, col});
+            tokens.push_back({TK_NUMBER, std::to_string((uint8_t)c), line, col, source_filename});
             advance();
             c = src[pos];
             if(c != '\''){
-                std::cerr << "(" << line << ", " << col << ") [Lexical error] Expected an ASCII character" << std::endl;
+                std::cerr << source_filename << " - (" << line << ", " << col << ") [Lexical error] Expected an ASCII character" << std::endl;
                 exit(1);
             }
             advance();
         }else{
-            std::cerr << "(" << line << ", " << col << ") [Lexical error] Unexpected character: " << c << std::endl;
+            std::cerr << source_filename << " - (" << line << ", " << col << ") [Lexical error] Unexpected character: " << c << std::endl;
             exit(1);
         }
     }
 
-    tokens.push_back({TK_END, "END\n", line, col});
+    tokens.push_back({TK_END, "END\n", line, col, source_filename});
     return tokens;
 }
 void Lexer::print(){
@@ -276,7 +276,7 @@ void Lexer::print(){
 
     for(size_t i = 0; i < tokens.size(); i++){
         token_t token = tokens[i];
-        std::cout << "[" << i << "]->" << token_name[tokens[i].type] << ":" << token.value << " ";
+        std::cout << token.source_file << " - [" << i << "]->" << token_name[tokens[i].type] << ":" << token.value << " ";
         if(tokens[i].type == TK_ENDLINE){
             std::cout << std::endl;
         }
