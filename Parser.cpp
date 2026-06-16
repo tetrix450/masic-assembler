@@ -436,6 +436,11 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     std::string symbol_identifier = token.value;
 
                     if(equ_table.find(symbol_identifier) == equ_table.end()){ // Check if the symbol is not defined yet
+
+                        if(label_table.find(symbol_identifier) != label_table.end()){
+                            error(token, "Label already defined with this identifier ("+symbol_identifier+")");
+                        }
+                        
                         advance();
                         expect({TK_NUMBER, TK_PLUS, TK_MINUS, TK_LPARENTHESIS, TK_IDENTIFIER}); // Check if it is the start of an expression
 
@@ -645,6 +650,7 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                     location_counter += node->size;
                 }else if(macros.find(token.value) != macros.end()){ // Expansión de macros
                 
+                    std::string macro_identifier = token.value;
                     macro_t macro = macros[token.value];
                     
                     // -------------- Recoger argumentos -----------------
@@ -660,7 +666,7 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                         }
 
                         if(argument_tokens[parameter_name].empty()){
-                            error(token,"Empty argument in macro");
+                            error(token,"Missing argument(s) in macro "+macro_identifier+". "+std::to_string(macro.parameters.size())+" needed, "+std::to_string(i)+" passed.");
                         }
 
                         if(i < macro.parameters.size() - 1){
@@ -751,10 +757,12 @@ std::vector<uint8_t> Parser::parse(){ // Returns machine code
                 // Do nothing
             break;
             case TK_LABEL:{
-                if(label_table.find(token.value) == label_table.end()){
-                    label_table[token.value] = location_counter;
-                }else{
+                if(label_table.find(token.value) != label_table.end()){
                     error(token, "Redefined label " + token.value);
+                }else if(equ_table.find(token.value) != equ_table.end()){
+                    error(token, "A constant symbol has already been defined with this identifier ("+token.value+")");
+                }else{
+                    label_table[token.value] = location_counter;
                 }
             }
             break;
