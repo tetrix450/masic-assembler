@@ -5,6 +5,7 @@
 #include "DataStructures.hpp"
 #include "Lexer.cpp"
 #include "Parser.cpp"
+#include "Preprocessor.cpp"
 
 int main(int argc, char* argv[]){
     // Check if the minimum number of arguments is correct
@@ -31,6 +32,10 @@ int main(int argc, char* argv[]){
     Lexer lexer(source_filename);
     std::vector<token_t> tokens = lexer.tokenize();
     
+    // Preprocess
+    Preprocessor preprocessor(tokens);
+    tokens = preprocessor.process();
+
     // Parse
     Parser parser(tokens);
     std::vector<uint8_t> bytes = parser.parse();
