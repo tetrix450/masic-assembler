@@ -1,0 +1,468 @@
+;---------------------------------------------------
+;-------------- VECTORES INTERRUPCIÓN --------------
+;---------------------------------------------------
+.d16 start
+
+
+.org 0x0100
+
+.include "macros.masic"
+.include "sintable.masic"
+
+;---------------------------------------------------
+;------------------ CONSTANTES ---------------------
+;---------------------------------------------------
+
+;-----------------------------
+; CENTRO DE LA PANTALLA
+;-----------------------------
+.equ CX 40
+.equ CY 30
+
+;-----------------------------
+; VÉRTICES DEL MODELO 3D
+;-----------------------------
+.equ VERTEX_SIZE 8 ; [Q8.8 x][Q8.8 y][Q8.8 z][padding 2 bytes]
+
+.equ MODEL_SCALE (16 << 8) + (0) ; Q8.8 -> 1.00000000
+.equ NUM_VERTICES 8
+
+model_vertices: .d16 -MODEL_SCALE, -MODEL_SCALE, -MODEL_SCALE, 0
+                .d16 -MODEL_SCALE, -MODEL_SCALE,  MODEL_SCALE, 0
+                .d16 -MODEL_SCALE,  MODEL_SCALE, -MODEL_SCALE, 0
+                .d16 -MODEL_SCALE,  MODEL_SCALE,  MODEL_SCALE, 0
+                .d16  MODEL_SCALE, -MODEL_SCALE, -MODEL_SCALE, 0
+                .d16  MODEL_SCALE, -MODEL_SCALE,  MODEL_SCALE, 0
+                .d16  MODEL_SCALE,  MODEL_SCALE, -MODEL_SCALE, 0
+                .d16  MODEL_SCALE,  MODEL_SCALE,  MODEL_SCALE, 0
+
+;-----------------------------
+; ARISTAS DEL MODELO 3D (ÍNDICES DE VÉRTICES)
+;-----------------------------
+.equ EDGE_SIZE 2
+
+.equ NUM_EDGES 12
+
+model_edges:    .d8 0, 1
+                .d8 1, 3
+                .d8 3, 2
+                .d8 2, 0
+                .d8 4, 5
+                .d8 5, 7
+                .d8 7, 6
+                .d8 6, 4
+                .d8 2, 6
+                .d8 3, 7
+                .d8 0, 4
+                .d8 1, 5
+
+;-----------------------------
+; ÁNGULO DE ROTACIÓN
+;-----------------------------
+rotation_angle: .d8 20
+
+;---------------------------------------------------
+;-------------------- RUTINAS ----------------------
+;---------------------------------------------------
+
+.include "utils.masic"
+
+;---------------------------------------------------
+; RUTINA draw
+; Dibujar en pantalla.
+;---------------------------------------------------
+draw:
+    call rotate_vertices_y
+    call project_vertices
+    call draw_edges
+ret
+
+;---------------------------------------------------
+; RUTINA rotate_vertices_y
+; Rotación del modelo
+;---------------------------------------------------
+rotate_vertices_y:
+
+    ;-----------------------------------
+    ; cargar seno/coseno del ángulo
+    ;-----------------------------------
+    SIN_Q88 rotation_angle, d4
+    COS_Q88 rotation_angle, d5
+
+    ;-----------------------------------
+    ; d8 = puntero origen
+    ; d9 = puntero destino
+    ; r0 = contador
+    ;-----------------------------------
+    MOVI16 d8, model_vertices
+    MOVI16 d9, model_vertices_transformed
+    MOVI8  r0, NUM_VERTICES
+
+rotate_vertices_y_loop:
+
+    ;===================================
+    ; Traer el vértice original a los registros:
+    ; d0 = x
+    ; d1 = y
+    ; d2 = z
+    ; d3 = basura
+    ;===================================
+    MOVI16  d13, VERTEX_SIZE ; Tamaño del buffer (tamaño del vértice)
+    MOV16   d14, d8          ; Origen  (vértices originales)
+    MOVI16  d15, d0          ; Destino (registros d0, d1, d2, d3)
+    call copy_buffer
+
+    ;===================================
+    ; x' = x*cos + z*sin
+    ;===================================
+
+    ; x*cos -> d6
+    MULS_Q88 d0, d5, d6
+
+    ; z*sin -> d7
+    MULS_Q88 d2, d4, d7
+
+    ADD16 d6, d7
+
+    ; Guardar x' en el vértice destino
+    load d6
+    store [d9]
+    INC16 d9
+
+    load d6+1
+    store [d9]
+    INC16 d9
+
+    ;===================================
+    ; y' = y
+    ;===================================
+
+    ; Guardar y' en el vértice destino
+    load d1
+    store [d9]
+    INC16 d9
+
+    load d1+1
+    store [d9]
+    INC16 d9
+
+    ;===================================
+    ; z' = -x*sin + z*cos
+    ;===================================
+
+    ; x*sin -> d6
+    MULS_Q88 d0, d4, d6
+
+    ; z*cos -> d7
+    MULS_Q88 d2, d5, d7
+
+    ; z*cos - x*sen -> d7
+    SUB16 d7, d6
+
+    ; Guardar z' en el vértice destino
+    load d7
+    store [d9]
+    INC16 d9
+
+    load d7+1
+    store [d9]
+    ADDI16 d9, 3    ; preparado para el siguiente vértice
+
+    ;===================================
+    ; siguiente vértice
+    ;===================================
+    
+    ADDI16 d8, VERTEX_SIZE  ; incrementar puntero origen
+
+    DEC8 r0
+    jnz rotate_vertices_y_loop
+
+ret
+
+;---------------------------------------------------
+; RUTINA draw_edges
+;
+; Recorre model_edges y dibuja cada arista:
+;   - Lee índices de vértices (i0, i1)
+;   - Convierte a coordenadas screen_vertices
+;   - Llama a draw_line(x0,y0,x1,y1)
+;
+; Estructura screen_vertices:
+;   [x, y] por vértice (2 bytes)
+;---------------------------------------------------
+draw_edges:
+
+    MOVI16 d0, model_edges
+    MOVI8  r0, NUM_EDGES
+
+draw_edges_loop:
+
+    ;===================================================
+    ; leer índice v0
+    ;===================================================
+    load [d0]
+    store r1        ; r1 = idx0
+
+    ;===================================================
+    ; leer índice v1
+    ;===================================================
+    INC16 d0
+    load [d0]
+    store r2        ; r2 = idx1
+
+    ; volver al inicio de la arista
+    DEC16 d0
+
+    ;===================================================
+    ; calcular dirección screen_vertices + idx0*2
+    ;===================================================
+    MOVI16 d1, screen_vertices
+
+    load r1
+    store d2
+    load #0
+    store d2+1
+
+    SHL16 d2
+    ADD16 d1, d2
+
+    ; x0
+    load [d1]
+    store r3
+
+    ; y0
+    INC16 d1
+    load [d1]
+    store r4
+
+    ;===================================================
+    ; calcular dirección screen_vertices + idx1*2
+    ;===================================================
+    MOVI16 d1, screen_vertices
+
+    load r2
+    store d2
+    load #0
+    store d2+1
+
+    SHL16 d2
+    ADD16 d1, d2
+
+    ; x1
+    load [d1]
+    store r5
+
+    ; y1
+    INC16 d1
+    load [d1]
+    store r6
+
+    load r0
+    push
+    load r1
+    push
+    load r2
+    push
+    load r3
+    push
+
+    ;===================================================
+    ; preparar draw_line(r0-r3)
+    ;===================================================
+    MOV8 r0, r3   ; x0
+    MOV8 r1, r4   ; y0
+    MOV8 r2, r5   ; x1
+    MOV8 r3, r6   ; y1
+
+    call draw_line
+
+    pop
+    store r3
+    pop
+    store r2
+    pop
+    store r1
+    pop
+    store r0
+
+    ; siguiente arista
+    ADDI16 d0, EDGE_SIZE
+
+    DEC8 r0
+    jnz draw_edges_loop
+
+ret
+
+;---------------------------------------------------
+; RUTINA project_vertices
+;
+; Convierte:
+;   (x, y, z) Q8.8 -> (CX + x, CY + y)
+;
+; guardándolo en screen_vertices:
+;   byte 0 = X pantalla
+;   byte 1 = Y pantalla
+;---------------------------------------------------
+project_vertices:
+
+    ;-----------------------------------
+    ; punteros
+    ;-----------------------------------
+    MOVI16 d0, model_vertices_transformed
+    MOVI16 d1, screen_vertices
+
+    ;-----------------------------------
+    ; contador de vértices
+    ;-----------------------------------
+    MOVI8 r0, NUM_VERTICES
+
+project_vertices_loop:
+
+    ;=================================================
+    ; x de pantalla
+    ;
+    ; x está en Q8.8 -> el byte alto es la parte entera
+    ;=================================================
+
+    ; Conseguir el byte alto de x (truncar unidades)
+
+    INC16 d0        ; apuntar al byte alto de x
+
+    load [d0]       ; cargar las unidades de x
+
+    add #CX        ; centrar en la pantalla
+
+    store [d1]      ; almacenar destino
+
+    INC16 d1        ; incrementar puntero destino
+
+
+
+    ;=================================================
+    ; y de pantalla
+    ;
+    ; y está en Q8.8 -> el byte alto es la parte entera
+    ;=================================================
+
+    ADDI16 d0, 2    ; apuntar al byte alto de y
+
+    load [d0]       ; cargar las unidades de y
+
+    add #CY        ; centrar en la pantalla
+
+    store [d1]      ; almacenar destino
+
+    INC16 d1        ; incrementar puntero destino
+
+    ;=================================================
+    ; siguiente vértice
+    ;=================================================
+
+    ADDI16 d0, 5 ; mover el puntero origen al siguiente vértice
+
+    DEC8 r0
+
+    cmp #0
+    jnz project_vertices_loop
+
+ret
+
+;---------------------------------------------------
+; RUTINA init
+; Código de inicio del programa
+;---------------------------------------------------
+init:
+
+    call clear_registers
+
+    DRAW_LINE_IMM 0, 0, 79, 59
+    DRAW_LINE_IMM 0, 59, 79, 0
+
+    call clear_screen
+
+ret
+
+;---------------------------------------------------
+;--------------------- PROGRAMA --------------------
+;---------------------------------------------------
+start:
+    call clear_screen
+    call init
+
+loop:
+    call draw
+jmp loop
+
+;---------------------------------------------------
+;------------------- DATOS (RAM) -------------------
+;---------------------------------------------------
+.org 0x2000
+
+;---------------------------------------------------
+; BANCO DE REGISTROS VIRTUAL
+;
+; 8  BITS:      r0-r15
+; 16 BITS:      d0-d15
+; 32 BITS:      q0-q15
+;
+; 80 bytes en total
+;---------------------------------------------------
+register_bank:                  .r8 16*1 + 16*2 + 8*4
+
+; REGISTROS DE 8 BITS
+.equ r0                         register_bank
+.equ r1                         register_bank+1
+.equ r2                         register_bank+2
+.equ r3                         register_bank+3
+.equ r4                         register_bank+4
+.equ r5                         register_bank+5
+.equ r6                         register_bank+6
+.equ r7                         register_bank+7
+.equ r8                         register_bank+8
+.equ r9                         register_bank+9
+.equ r10                        register_bank+10
+.equ r11                        register_bank+11
+.equ r12                        register_bank+12
+.equ r13                        register_bank+13
+.equ r14                        register_bank+14
+.equ r15                        register_bank+15
+
+; REGISTROS DE 16 BITS
+.equ d0                         register_bank+16
+.equ d1                         register_bank+18
+.equ d2                         register_bank+20
+.equ d3                         register_bank+22
+.equ d4                         register_bank+24
+.equ d5                         register_bank+26
+.equ d6                         register_bank+28
+.equ d7                         register_bank+30
+.equ d8                         register_bank+32
+.equ d9                         register_bank+34
+.equ d10                        register_bank+36
+.equ d11                        register_bank+38
+.equ d12                        register_bank+40
+.equ d13                        register_bank+42
+.equ d14                        register_bank+44
+.equ d15                        register_bank+46
+
+; REGISTROS DE 32 BITS
+.equ q0                         register_bank+48
+.equ q1                         register_bank+52
+.equ q2                         register_bank+56
+.equ q3                         register_bank+60
+.equ q4                         register_bank+64
+.equ q5                         register_bank+68
+.equ q6                         register_bank+72
+.equ q7                         register_bank+76
+
+;-----------------------------
+; BUFFER DE VÉRTICES TRANSFORMADOS DEL MODELO 3D
+;-----------------------------
+model_vertices_transformed:     .r8 NUM_VERTICES * VERTEX_SIZE
+
+;-----------------------------
+; VÉRTICES PROYECTADOS (VÉRTICES 2D)
+;-----------------------------
+.equ SCREEN_VERTEX_SIZE 2
+
+screen_vertices:                .r8 NUM_VERTICES * SCREEN_VERTEX_SIZE

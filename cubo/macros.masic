@@ -1,0 +1,695 @@
+;---------------------------------------------------
+;-------------------- MACROS -----------------------
+;---------------------------------------------------
+
+;---------------------------------------------------
+; ABSAC
+; Calcular el valor absoluto del acumulador
+;---------------------------------------------------
+.macro ABSAC
+    
+    cmp #0
+    jns end
+
+    not
+    add #1
+
+end:
+.endm
+
+;---------------------------------------------------
+; ABS8
+; Calcular el valor absoluto de un valor de 8 bits
+;---------------------------------------------------
+.macro ABS8 addr
+    
+    load %addr
+    cmp #0
+    jns end
+
+    not
+    add #1
+    store %addr
+
+end:
+.endm
+
+;---------------------------------------------------
+; NEG8
+; Negar en complemento a 2 un dato de 8 bits
+;---------------------------------------------------
+.macro NEG8 addr
+
+    load %addr
+    not
+    add #1
+    store %addr
+
+.endm
+
+;---------------------------------------------------
+; NEG16
+; Negar en complemento a 2 un dato de 16 bits
+;---------------------------------------------------
+.macro NEG16 addr
+    load %addr
+    not
+    store %addr
+
+    load %addr+1
+    not
+    store %addr+1
+
+    INC16 %addr
+.endm
+
+;---------------------------------------------------
+; NEG32
+; Negar en complemento a 2 un dato de 32 bits
+;---------------------------------------------------
+.macro NEG32 addr
+    load %addr
+    not
+    store %addr
+
+    load %addr+1
+    not
+    store %addr+1
+
+    load %addr+2
+    not
+    store %addr+2
+
+    load %addr+3
+    not
+    store %addr+3
+
+    INC32 %addr
+.endm
+
+;---------------------------------------------------
+; ABS16
+; Valor absoluto de un entero de 16 bits
+;
+; addr: dirección del dato
+;---------------------------------------------------
+.macro ABS16 addr
+
+    load %addr+1
+    cmp #0
+    jns end
+
+    NEG16 %addr
+
+end:
+.endm
+
+;---------------------------------------------------
+; MOVI8
+; Cargar un inmediato de 8 bits
+;---------------------------------------------------
+.macro MOVI8 dst, src
+
+    load #%src
+    store %dst
+
+.endm
+
+;---------------------------------------------------
+; MOVI16
+; Cargar un inmediato de 16 bits
+;---------------------------------------------------
+.macro MOVI16 dst, imm
+
+    load #(%imm)&0xFF
+    store %dst
+
+    load #((%imm)>>8)&0xFF
+    store %dst+1
+
+.endm
+
+;---------------------------------------------------
+; MOV8
+; Copiar un dato de 8 bits
+;---------------------------------------------------
+.macro MOV8 dst, src
+
+    load %src
+    store %dst
+
+.endm
+
+;---------------------------------------------------
+; MOV16
+; Copiar un dato de 16 bits
+;---------------------------------------------------
+.macro MOV16 dst, src
+
+    load %src
+    store %dst
+
+    load %src+1
+    store %dst+1
+
+.endm
+
+;---------------------------------------------------
+; MOV32
+; Copiar un dato de 32 bits
+;---------------------------------------------------
+.macro MOV32 dst, src
+
+    load %src
+    store %dst
+
+    load %src+1
+    store %dst+1
+
+    load %src+2
+    store %dst+2
+
+    load %src+3
+    store %dst+3
+
+.endm
+
+;---------------------------------------------------
+; ADD8
+; Sumar dos datos de 8 bits
+;---------------------------------------------------
+.macro ADD8 dst, src
+
+    load %dst
+    add %src
+    store %dst
+
+.endm
+
+;---------------------------------------------------
+; ADDI8
+; Sumar dato inmediato de 8 bits
+;---------------------------------------------------
+.macro ADDI8 dst, imm
+
+    load %dst
+    add #%imm
+    store %dst
+
+.endm
+
+;---------------------------------------------------
+; ADD16
+; Sumar dos datos de 16 bits
+;---------------------------------------------------
+.macro ADD16 dst, src
+
+    load %dst
+    add %src
+    store %dst
+
+    load %dst+1
+    adc %src+1
+    store %dst+1
+
+.endm
+
+;---------------------------------------------------
+; ADDI16
+; Sumar dato inmediato de 16 bits
+;---------------------------------------------------
+.macro ADDI16 dst, imm
+
+    load %dst
+    add #(%imm)&0xFF
+    store %dst
+
+    load %dst+1
+    adc #(%imm >> 8)&0xFF
+    store %dst+1
+
+.endm
+
+;---------------------------------------------------
+; SUMAR 32 BITS
+; dest = dest + source
+;---------------------------------------------------
+.macro ADD32 dest, source
+
+    load %dest
+    add %source
+    store %dest
+
+    load %dest+1
+    adc %source+1
+    store %dest+1
+
+    load %dest+2
+    adc %source+2
+    store %dest+2
+
+    load %dest+3
+    adc %source+3
+    store %dest+3
+
+.endm
+
+;---------------------------------------------------
+; SUB8
+; Restar dos datos de 8 bits
+;---------------------------------------------------
+.macro SUB8 dst, src
+
+    load %dst
+    sub %src
+    store %dst
+
+.endm
+
+;---------------------------------------------------
+; SUBI8
+; Restar un inmediato de 8 bits
+;---------------------------------------------------
+.macro SUBI8 dst, imm
+
+    load %dst
+    sub #(%imm)&0xFF
+    store %dst
+
+.endm
+
+;---------------------------------------------------
+; SUB16
+; Restar dos datos de 16 bits
+;---------------------------------------------------
+.macro SUB16 dst, src
+
+    load %dst
+    sub %src
+    store %dst
+
+    load %dst+1
+    subc %src+1
+    store %dst+1
+
+.endm
+
+;---------------------------------------------------
+; SUBI16
+; Restar un inmediato de 16 bits
+;---------------------------------------------------
+.macro SUBI16 dst, imm
+
+    load %dst
+    sub #(%imm)&0xFF
+    store %dst
+
+    load %dst+1
+    subc #(%imm >> 8)&0xFF
+    store %dst+1
+
+.endm
+
+;---------------------------------------------------
+; SIN_Q88
+; out = sin_table[angle]
+;
+; angle : variable con signo de 8 bits
+; out   : variable en formato Q8.8
+;
+; d14, d15 no pueden usarse en out
+;---------------------------------------------------
+.macro SIN_Q88 angle, out
+
+    load d14
+    push
+    load d14+1
+    push
+    load d15
+    push
+    load d15+1
+    push
+
+    ; d15 = &sin_table + angle*2
+
+    MOVI16 d15, sin_table
+    MOV8 d14, %angle
+    MOVI8 d14+1, 0
+    SHL16 d14
+    ADD16 d15, d14
+
+    ; cargar seno Q8.8
+
+    load [d15]
+    store %out
+
+    INC16 d15
+
+    load [d15]
+    store %out+1
+
+    pop
+    store d15+1
+    pop
+    store d15
+    pop
+    store d14+1
+    pop
+    store d14
+
+.endm
+
+;---------------------------------------------------
+; COS_Q88
+; out = sin_table[angle + 64]
+;
+; angle : variable con signo de 8 bits
+; out   : variable en formato Q8.8
+;
+; d14, d15 no pueden usarse en out
+;---------------------------------------------------
+.macro COS_Q88 angle, out
+
+    load d14
+    push
+    load d14+1
+    push
+    load d15
+    push
+    load d15+1
+    push
+
+    ; d15 = &sin_table + ((angle + 64)%256)*2
+
+    MOVI16 d15, sin_table
+    MOV8 d14, %angle
+    ADDI8 d14, 64
+    MOVI8 d14+1, 0
+    SHL16 d14
+    ADD16 d15, d14
+
+    ; cargar coseno Q8.8
+
+    load [d15]
+    store %out
+
+    INC16 d15
+
+    load [d15]
+    store %out+1
+
+    pop
+    store d15+1
+    pop
+    store d15
+    pop
+    store d14+1
+    pop
+    store d14
+
+.endm
+
+;---------------------------------------------------
+; Q1616_TO_Q88
+; Convertir de Q16.16 a Q8.8
+; Se pierde precisión y el número es truncado
+;---------------------------------------------------
+.macro Q1616_TO_Q88 in32, out16
+
+    load %in32+1
+    store %out16
+
+    load %in32+2
+    store %out16+1
+
+.endm
+
+
+;---------------------------------------------------
+; MULS_Q88
+; out = a * b
+;
+; a, b, out: direcciones de datos de 16 bits
+;
+; d14, d15 no pueden usarse en out
+;---------------------------------------------------
+.macro MULS_Q88 a, b, out
+
+    load d14
+    push
+    load d14+1
+    push
+    load d15
+    push
+    load d15+1
+    push
+
+    load %a
+    store d14
+    load %a+1
+    store d14+1
+
+    load %b
+    store d15
+    load %b+1
+    store d15+1
+
+    call mul16s
+
+    Q1616_TO_Q88 q1, %out
+
+    pop
+    store d15+1
+    pop
+    store d15
+    pop
+    store d14+1
+    pop
+    store d14
+
+.endm
+
+;---------------------------------------------------
+; SHIFTEAR A LA IZQUIERDA UN DATO DE 8 BITS
+; addr: dirección del dato en memoria.
+;---------------------------------------------------
+.macro SHL8 addr
+
+    load %addr
+    shl
+    store %addr
+
+.endm
+
+;---------------------------------------------------
+; SHIFTEAR A LA IZQUIERDA UN DATO DE 16 BITS
+; addr: dirección del dato en memoria.
+;---------------------------------------------------
+.macro SHL16 addr
+
+    load %addr
+    shl
+    store %addr
+    load %addr+1
+    rcl
+    store %addr+1
+
+.endm
+
+;---------------------------------------------------
+; DESPLAZAR DERECHA 16 BITS
+; addr: dirección del dato en memoria
+;---------------------------------------------------
+.macro SHR16 addr
+
+    load %addr+1
+    shr
+    store %addr+1
+
+    load %addr
+    rcr
+    store %addr
+
+.endm
+
+;---------------------------------------------------
+; INCREMENTAR UN DATO DE 16 BITS
+; addr: dirección del dato en memoria.
+;---------------------------------------------------
+.macro INC16 addr
+
+    load %addr
+    add #1
+    store %addr
+
+    load %addr+1
+    adc #0
+    store %addr+1
+
+.endm
+
+;---------------------------------------------------
+; INCREMENTAR UN DATO DE 32 BITS
+; addr: dirección del dato en memoria.
+;---------------------------------------------------
+.macro INC32 addr
+
+    load %addr
+    add #1
+    store %addr
+
+    load %addr+1
+    adc #0
+    store %addr+1
+
+    load %addr+2
+    adc #0
+    store %addr+2
+
+    load %addr+3
+    adc #0
+    store %addr+3
+
+.endm
+
+;---------------------------------------------------
+; DECREMENTAR UN DATO DE 8 BITS
+; addr: dirección del dato en memoria.
+;---------------------------------------------------
+.macro DEC8 addr
+
+    load %addr
+    sub #1
+    store %addr
+
+.endm
+
+;---------------------------------------------------
+; DECREMENTAR UN DATO DE 16 BITS
+; addr: dirección del dato en memoria.
+;---------------------------------------------------
+.macro DEC16 addr
+
+    load %addr
+    sub #1
+    store %addr
+
+    load %addr+1
+    subc #0
+    store %addr+1
+
+.endm
+
+;---------------------------------------------------
+; SHIFTEAR A LA IZQUIERDA UN DATO DE 32 BITS
+;---------------------------------------------------
+.macro SHL32 addr
+
+    load %addr
+    shl
+    store %addr
+
+    load %addr+1
+    rcl
+    store %addr+1
+
+    load %addr+2
+    rcl
+    store %addr+2
+
+    load %addr+3
+    rcl
+    store %addr+3
+
+.endm
+
+;---------------------------------------------------
+; SWAP8
+; Intercambiar dos valores de 8 bits
+;
+; addr1, addr2: direcciones de valores a intercambiar
+;---------------------------------------------------
+.macro SWAP8 addr1, addr2
+    load %addr1
+    push
+
+    load %addr2
+    store %addr1
+
+    pop
+    store %addr2
+.endm
+
+;---------------------------------------------------
+; SWAP16
+; Intercambiar dos valores de 16 bits
+;
+; addr1, addr2: direcciones de valores a intercambiar
+;---------------------------------------------------
+.macro SWAP16 addr1, addr2
+    load %addr1
+    push
+    load %addr1+1
+    push
+
+    load %addr2
+    store %addr1
+    load %addr2+1
+    store %addr1+1
+
+    pop
+    store %addr2+1
+    pop
+    store %addr2
+.endm
+
+;---------------------------------------------------
+; PLOT
+; Dibujar un punto en (x, y)
+;
+; x, y: coordenadas del punto
+;---------------------------------------------------
+.macro PLOT x, y
+    
+    load r0
+    push
+    load r1
+    push
+    load r2
+    push
+
+    load %x
+    store r0
+    load %y
+    store r1
+    load #160
+    store r2
+    call plot
+
+    pop
+    store r2
+    pop
+    store r1
+    pop
+    store r0
+
+.endm
+
+;---------------------------------------------------
+; DRAW_LINE_IMM
+; Dibujar línea con valores inmediatos
+;
+; x0, y0: punto inicial
+; x1, y1: punto final
+;---------------------------------------------------
+.macro DRAW_LINE_IMM x0, y0, x1, y1
+    load #%x0
+    store r0
+    load #%y0
+    store r1
+    load #%x1
+    store r2
+    load #%y1
+    store r3
+    call draw_line
+.endm
