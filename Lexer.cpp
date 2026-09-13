@@ -28,6 +28,7 @@ Lexer::Lexer(std::string source_filename):source_filename(source_filename){
     // Close source file
     source_file.close();
 }
+
 int Lexer::advance(){
     if(src[pos] == '\n'){
         col = 1;
@@ -37,6 +38,7 @@ int Lexer::advance(){
     }
     return pos++;
 }
+
 token_t Lexer::readIdentifierOrLabel(){
     size_t start = pos;
     size_t start_col = col;
@@ -58,6 +60,7 @@ token_t Lexer::readIdentifierOrLabel(){
     // It is an identifier
     return {TK_IDENTIFIER, value, line, start_col, source_filename};
 }
+
 token_t Lexer::readDirective(){
     size_t start = pos;
     size_t start_col = col;
@@ -73,27 +76,29 @@ token_t Lexer::readDirective(){
     // Return the token
     return {TK_DIRECTIVE, value, line, start_col, source_filename};
 }
+
 token_t Lexer::readString(){
     size_t start = pos;
     size_t start_col = col;
     
-    // Move cursor until \"
+    // Move cursor until finding a double quotation mark
     while(pos < src.size() && src[pos] != '\"'){
         advance();
+
+        if(src[pos] == '\n' || (pos == src.size() - 1 && src[pos] != '\"')){
+            std::cerr << source_filename << " - (" << line << ", " << start_col << ") [Lexical error] String has no closing double quotes (\")" << std::endl;
+            exit(1);
+        }
     }
 
-    if(pos == src.size() - 1){
-        std::cerr << source_filename << " - (" << line << ", " << col << ") [Lexical error] Found string with no closing quotes (\")" << std::endl;
-        exit(1);
-    }else{
-        advance();
-    }
+    advance();
 
     // Get the directive string
     std::string value = src.substr(start, pos - start - 1);
 
     return {TK_STRING, value, line, start_col, source_filename};
 }
+
 token_t Lexer::readNumber(){
     size_t start = pos;
     size_t start_col = col;
@@ -155,6 +160,7 @@ token_t Lexer::readNumber(){
 
     return {TK_NUMBER, value, line, start_col, source_filename};
 }
+
 std::vector<token_t> Lexer::tokenize(){
     // Read character by character and tokenize all the program
     while(pos < src.size()){
@@ -268,6 +274,7 @@ std::vector<token_t> Lexer::tokenize(){
     tokens.push_back({TK_END, "END\n", line, col, source_filename});
     return tokens;
 }
+
 void Lexer::print(){
     std::string token_name[] = {"IDENTIFIER", "NUMBER", "STRING", "DIRECTIVE", "LABEL", "LBRACKET", "RBRACKET",
     "ENDLINE", "PLUS", "MINUS", "MULTIPLY", "DIVIDE", "LPAREN", "RPAREN", "HASH", "END",
