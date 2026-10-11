@@ -67,7 +67,7 @@ std::vector<inst_t> instructions = {
     {"POP", ADDR_NOOP, 0x32},
     {"CALL", ADDR_DIRECT, 0x33},
     {"RET", ADDR_NOOP, 0x34},
-    {"INT", ADDR_IMMEDIATE, 0x35},
+    {"STORE.SP", ADDR_DIRECT, 0x35},
     {"RETI", ADDR_NOOP, 0x36},
     //{"???", ADDR_NOOP, 0x37},
     //{"???", ADDR_NOOP, 0x38},
@@ -77,7 +77,7 @@ std::vector<inst_t> instructions = {
     {"OUT", ADDR_INDIRECT, 0x3C},
     {"IN", ADDR_DIRECT, 0x3D},
     {"OUT", ADDR_DIRECT, 0x3E},
-    {"STORE.SP", ADDR_DIRECT, 0x3F},
+    {"INT", ADDR_NOOP, 0x3F},
 };
 
 // ########################################################
